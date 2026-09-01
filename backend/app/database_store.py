@@ -70,10 +70,20 @@ class RelationalStore(InMemoryStore):
         with self._engine.begin() as connection:
             for statement in SCHEMA_STATEMENTS:
                 connection.execute(text(statement))
+            if self._engine.dialect.name == "postgresql":
+                connection.execute(text("CREATE SEQUENCE IF NOT EXISTS actions_id_seq"))
+                connection.execute(text("ALTER SEQUENCE actions_id_seq OWNED BY actions.id"))
+                connection.execute(text("ALTER TABLE actions ALTER COLUMN id SET DEFAULT nextval('actions_id_seq')"))
+                connection.execute(
+                    text(
+                        "SELECT setval('actions_id_seq', "
+                        "COALESCE((SELECT MAX(id) FROM actions), 0) + 1, false)"
+                    )
+                )
 
-    def _rows(self, statement: str):
+    def _rows(self, statement: str, parameters: dict | None = None):
         with self._engine.connect() as connection:
-            return list(connection.execute(text(statement)).mappings())
+            return list(connection.execute(text(statement), parameters or {}).mappings())
 
     def _load(self) -> None:
         with self._lock:
@@ -101,7 +111,7 @@ class RelationalStore(InMemoryStore):
 
     def _persist(self) -> None:
         with self._engine.begin() as connection:
-            for table in ("sources", "articles", "events", "preferences", "actions", "crawl_runs"):
+            for table in ("sources", "articles", "events", "crawl_runs"):
                 connection.execute(text(f"DELETE FROM {table}"))
             connection.execute(
                 text("INSERT INTO sources(id, payload) VALUES(:id, :payload)"),
@@ -116,23 +126,6 @@ class RelationalStore(InMemoryStore):
                 [{"id": item.id, "payload": self._json(item)} for item in self.events.values()],
             ) if self.events else None
             connection.execute(
-                text("INSERT INTO preferences(anonymous_user_id, payload) VALUES(:anonymous_user_id, :payload)"),
-                [{"anonymous_user_id": item.anonymous_user_id, "payload": self._json(item)} for item in self.preferences.values()],
-            ) if self.preferences else None
-            connection.execute(
-                text("INSERT INTO actions(id, anonymous_user_id, event_id, action_type, created_at) VALUES(:id, :anonymous_user_id, :event_id, :action_type, :created_at)"),
-                [
-                    {
-                        "id": position,
-                        "anonymous_user_id": item.anonymous_user_id,
-                        "event_id": item.event_id,
-                        "action_type": item.action_type,
-                        "created_at": ensure_utc(item.created_at).isoformat(),
-                    }
-                    for position, item in enumerate(self.actions, start=1)
-                ],
-            ) if self.actions else None
-            connection.execute(
                 text("INSERT INTO crawl_runs(id, payload) VALUES(:id, :payload)"),
                 [{"id": item.id, "payload": self._json(item)} for item in self.runs.values()],
             ) if self.runs else None
@@ -145,9 +138,67 @@ class RelationalStore(InMemoryStore):
         self.persist()
 
     def get_preference(self, anonymous_user_id: str) -> UserPreference:
-        preference = super().get_preference(anonymous_user_id)
-        self.persist()
-        return preference
+        with self._lock:
+            rows = self._rows(
+                "SELECT payload FROM preferences WHERE anonymous_user_id = :anonymous_user_id",
+                {"anonymous_user_id": anonymous_user_id},
+            )
+            if rows:
+                preference = UserPreference(**json.loads(rows[0]["payload"]))
+            else:
+                preference = UserPreference(anonymous_user_id=anonymous_user_id)
+                self._persist_preference(preference)
+            self.preferences[anonymous_user_id] = preference
+            return preference
+
+    def _persist_preference(self, preference: UserPreference) -> None:
+        with self._engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO preferences(anonymous_user_id, payload) "
+                    "VALUES(:anonymous_user_id, :payload) "
+                    "ON CONFLICT(anonymous_user_id) DO UPDATE SET payload = excluded.payload"
+                ),
+                {"anonymous_user_id": preference.anonymous_user_id, "payload": self._json(preference)},
+            )
+
+    def set_preference(self, preference: UserPreference) -> UserPreference:
+        with self._lock:
+            self._persist_preference(preference)
+            self.preferences[preference.anonymous_user_id] = preference
+            return preference
+
+    def add_action(self, action: UserAction) -> UserAction:
+        with self._lock:
+            with self._engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO actions(anonymous_user_id, event_id, action_type, created_at) "
+                        "VALUES(:anonymous_user_id, :event_id, :action_type, :created_at)"
+                    ),
+                    {
+                        "anonymous_user_id": action.anonymous_user_id,
+                        "event_id": action.event_id,
+                        "action_type": action.action_type,
+                        "created_at": ensure_utc(action.created_at).isoformat(),
+                    },
+                )
+            self.actions.append(action)
+            return action
+
+    def library(self, anonymous_user_id: str, action_type: str = "saved") -> list[Event]:
+        with self._lock:
+            rows = self._rows(
+                "SELECT anonymous_user_id, event_id, action_type, created_at "
+                "FROM actions WHERE anonymous_user_id = :anonymous_user_id ORDER BY id",
+                {"anonymous_user_id": anonymous_user_id},
+            )
+            user_actions = [
+                UserAction(row["anonymous_user_id"], row["event_id"], row["action_type"], self._dt(row["created_at"]))
+                for row in rows
+            ]
+            self.actions = [item for item in self.actions if item.anonymous_user_id != anonymous_user_id] + user_actions
+            return super().library(anonymous_user_id, action_type=action_type)
 
     def close(self) -> None:
         self._engine.dispose()

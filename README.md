@@ -3,7 +3,7 @@
 面向公众的 AI 行业热点摘要网站。公网版本使用 Streamlit Community Cloud 托管，通过 Neon PostgreSQL 持久保存新闻事件、来源、更新记录、匿名收藏和已读状态。
 
 - GitHub：[https://github.com/CitrusNh/ai-news-radar](https://github.com/CitrusNh/ai-news-radar)
-- Streamlit 公网 Demo：首次在 Streamlit Community Cloud 部署成功后补充实际 HTTPS 地址
+- Streamlit 公网 Demo：https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/
 
 ## 产品功能
 

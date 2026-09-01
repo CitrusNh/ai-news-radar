@@ -31,6 +31,48 @@ def test_relational_store_persists_all_server_state(tmp_path):
     second.close()
 
 
+def test_relational_store_shares_user_state_without_rewriting_catalog(tmp_path):
+    database_url = f"sqlite:///{(tmp_path / 'shared-users.db').as_posix()}"
+    first = RelationalStore(database_url)
+    first.seed(
+        [Source("source-1", "测试来源", trust_tier=3)],
+        [{"source_id": "source-1", "url": "https://example.com/story", "title": "共享用户状态", "summary": "摘要", "channel": "模型与产品", "published_at": datetime.now(timezone.utc)}],
+    )
+    second = RelationalStore(database_url)
+    event_id = next(iter(first.events))
+
+    first.add_action(UserAction("shared-user", event_id, "saved"))
+    assert [event.id for event in second.library("shared-user")] == [event_id]
+
+    second.set_preference(UserPreference("shared-user", keywords=["跨实例可见"]))
+    second.add_action(UserAction("second-user", event_id, "read"))
+    first.add_run(CrawlRun("run-after-actions", datetime.now(timezone.utc), status="completed"))
+    assert first.get_preference("shared-user").keywords == ["跨实例可见"]
+    assert [event.id for event in first.library("second-user", action_type="read")] == [event_id]
+    assert event_id in first.events
+    assert event_id in second.events
+    first.close()
+    second.close()
+
+
+def test_relational_store_appends_multiple_actions_with_generated_ids(tmp_path):
+    database_url = f"sqlite:///{(tmp_path / 'action-ids.db').as_posix()}"
+    store = RelationalStore(database_url)
+    store.seed(
+        [Source("source-1", "测试来源", trust_tier=3)],
+        [{"source_id": "source-1", "url": "https://example.com/story", "title": "动作编号", "summary": "摘要", "channel": "模型与产品", "published_at": datetime.now(timezone.utc)}],
+    )
+    event_id = next(iter(store.events))
+
+    store.add_action(UserAction("action-user", event_id, "saved"))
+    store.add_action(UserAction("action-user", event_id, "unsaved"))
+    store.add_action(UserAction("action-user", event_id, "read"))
+
+    assert store.library("action-user", action_type="saved") == []
+    assert [event.id for event in store.library("action-user", action_type="read")] == [event_id]
+    store.close()
+
+
 def test_persistent_store_uses_sqlite_locally_and_seeds_demo(tmp_path):
     store = persistent_store(tmp_path / "runtime" / "signalscope.db")
     assert len(store.events) == 12
