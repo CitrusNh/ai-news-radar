@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -23,7 +24,8 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 
 def create_app(store: InMemoryStore | None = None, frontend_dir: Path | None = None) -> FastAPI:
-    selected_store = store or persistent_demo_store()
+    database_path = os.getenv("SIGNALSCOPE_DATABASE_PATH", "data/runtime/signalscope.db")
+    selected_store = store or persistent_demo_store(database_path)
     scheduler_enabled = os.getenv("SIGNALSCOPE_SCHEDULER_ENABLED", "false").lower() in {"1", "true", "yes"}
     scheduler_interval = int(os.getenv("SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS", "14400"))
 
@@ -34,10 +36,23 @@ def create_app(store: InMemoryStore | None = None, frontend_dir: Path | None = N
         app.state.scheduler.stop()
 
     app = FastAPI(title="SignalScope AI API", version="0.1.0", description="AI 热点摘要雷达 MVP API", lifespan=lifespan)
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "PUT"], allow_headers=["*"])
+    allowed_origins = [origin.strip() for origin in os.getenv("SIGNALSCOPE_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+    if allowed_origins:
+        app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_methods=["GET", "POST", "PUT"], allow_headers=["Content-Type", "X-Anonymous-User", "X-Admin-Key"])
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
     app.state.store = selected_store
     app.state.scheduler = IntervalScheduler(lambda: IngestionWorkflow(app.state.store).run(), scheduler_interval, scheduler_enabled)
     web_dir = frontend_dir or FRONTEND_DIR
+
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'"
+        return response
 
     def get_store() -> InMemoryStore:
         return app.state.store

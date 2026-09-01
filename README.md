@@ -68,6 +68,22 @@ docker compose down
 
 除非明确希望清空数据，不要执行 `docker compose down -v`。
 
+## 部署为所有人可访问的网站
+
+仓库包含 `render.yaml`，可以部署为单一公网 Web Service：用户访问一个 HTTPS 地址即可使用，不需要安装 Python、Docker，也不需要分别打开前端和后端。
+
+部署前需要先把这个仓库推送到你自己的 GitHub/GitLab，再在 Render 中选择 Blueprint 部署。部署配置会：
+
+- 使用 Docker 构建一体化网站；
+- 自动创建管理密钥；
+- 将 `/app/data/runtime` 挂载为持久化磁盘；
+- 使用 `/api/v1/health` 做健康检查；
+- 每次仓库提交后自动重新部署。
+
+部署完成后会得到类似 `https://signalscope-ai.onrender.com` 的公开网址。注意：持久化磁盘通常需要云平台的付费实例；免费临时文件系统会在重启后丢失 SQLite 数据。
+
+CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测试、前端语法检查和 Docker 镜像构建。
+
 主要接口：
 
 - `GET /api/v1/events`：热点事件列表；
