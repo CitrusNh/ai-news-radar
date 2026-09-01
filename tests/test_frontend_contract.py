@@ -24,21 +24,27 @@ def test_frontend_maps_api_event_fields_needed_by_cards():
         assert field in APP
 
 
-def test_readme_documents_persistence_safety_and_admin_workflow():
+def test_readme_documents_persistence_and_automatic_update_workflow():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for phrase in ["Streamlit Community Cloud", "PostgreSQL", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs", "所有人可访问的网站"]:
+    for phrase in [
+        "Streamlit Community Cloud",
+        "Neon PostgreSQL",
+        "每天北京时间 08:00、22:00 自动更新",
+        "GitHub Actions",
+        "New repository secret",
+        "公开 HTML 列表页",
+    ]:
         assert phrase in readme
 
 
-def test_readme_records_the_verified_public_release():
+def test_readme_records_the_current_public_release_verification():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for phrase in [
         "https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/",
-        "公网验收结果",
-        "47 passed",
-        "94.70%",
-        "GitHub Actions CI",
-        "API 文档仅供本地访问",
+        "63 passed",
+        "92.71%",
+        "24 个来源中 21 个成功",
+        "API 文档仅在本地访问",
     ]:
         assert phrase in readme
 
