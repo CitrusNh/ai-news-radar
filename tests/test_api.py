@@ -22,6 +22,7 @@ def test_list_events_supports_domain_channel_keyword_and_sort(client):
     assert response.status_code == 200
     events = response.json()
     assert events and all(event["channel"] == "企业应用" for event in events)
+    assert events[0]["source_names"] and events[0]["source_urls"]
     keyword = client.get("/api/v1/events", params={"keyword": "Agent"}, headers={"X-Anonymous-User": "u-api"}).json()
     assert keyword and all("Agent" in event["title"] or "Agent" in event["enrichment"]["summary"] for event in keyword)
 

@@ -89,6 +89,13 @@ def demo_store() -> InMemoryStore:
         Source("mit-tech-review", "MIT Technology Review", source_type="editorial", trust_tier=2),
         Source("huggingface", "Hugging Face", source_type="community", trust_tier=2),
         Source("microsoft-ai", "Microsoft AI", trust_tier=3),
+        Source("the-information", "The Information", source_type="editorial", trust_tier=2),
+        Source("bloomberg", "Bloomberg", source_type="editorial", trust_tier=2),
+        Source("stanford-hai", "Stanford HAI", source_type="research", trust_tier=3),
+        Source("techcrunch", "TechCrunch", source_type="editorial", trust_tier=2),
+        Source("anthropic", "Anthropic", trust_tier=3),
+        Source("aws-ml", "AWS Machine Learning", trust_tier=3),
+        Source("meta-ai", "Meta AI", trust_tier=3),
     ]
     raw_articles = [
         {"source_id": "openai", "url": "https://openai.com/news/reasoning-model?utm_source=demo", "title": "OpenAI 发布新一代推理模型", "summary": "新模型针对长链路推理与工具调用做了系统性优化，开发者预览版开放。", "channel": "模型与产品", "published_at": now.replace(microsecond=0), "entities": ["OpenAI", "推理模型"]},
@@ -96,6 +103,13 @@ def demo_store() -> InMemoryStore:
         {"source_id": "mit-tech-review", "url": "https://www.technologyreview.com/ai-safety-standard", "title": "全球 AI 安全评测开始趋向统一", "summary": "监管机构与研究组织正在推动更可比的评测框架。", "channel": "政策安全", "published_at": now.replace(microsecond=0), "entities": ["AI 安全", "监管"]},
         {"source_id": "huggingface", "url": "https://huggingface.co/blog/light-multimodal", "title": "开源社区发布轻量级多模态模型", "summary": "新模型在消费级 GPU 上即可运行，降低多模态原型成本。", "channel": "模型与产品", "published_at": now.replace(microsecond=0), "entities": ["多模态", "开源模型"]},
         {"source_id": "microsoft-ai", "url": "https://blogs.microsoft.com/ai/agent-workflow", "title": "企业开始把 AI Agent 接入审批和运营流程", "summary": "企业案例显示 Agent 的价值正在从对话体验转向流程自动化。", "channel": "企业应用", "published_at": now.replace(microsecond=0), "entities": ["AI Agent", "工作流"]},
+        {"source_id": "the-information", "url": "https://www.theinformation.com/articles/manufacturing-ai-procurement", "title": "制造业 AI 采购从试点进入规模化", "summary": "多家制造企业将 AI 项目移交到业务线，采购关注点转向可量化的效率收益。", "channel": "企业应用", "published_at": now.replace(microsecond=0), "entities": ["制造业", "企业采购", "ROI"]},
+        {"source_id": "bloomberg", "url": "https://www.bloomberg.com/news/articles/ai-infrastructure-europe", "title": "欧洲 AI 基础设施融资升温", "summary": "新一轮投资关注数据中心、电力和模型服务的组合方案。", "channel": "资本市场", "published_at": now.replace(microsecond=0), "entities": ["AI 基础设施", "算力", "能源"]},
+        {"source_id": "stanford-hai", "url": "https://hai.stanford.edu/research/agent-risk-benchmark", "title": "研究团队提出新的 Agent 风险基准", "summary": "基准测试覆盖任务规划、工具调用和越权行为，为评估 Agent 可控性提供样例。", "channel": "政策安全", "published_at": now.replace(microsecond=0), "entities": ["Agent 安全", "评测基准", "工具调用"]},
+        {"source_id": "techcrunch", "url": "https://techcrunch.com/2026/09/01/ai-app-funding-retention", "title": "AI 应用公司融资逻辑转向客户留存", "summary": "投资人开始要求 AI 应用证明重复使用率和毛利改善。", "channel": "资本市场", "published_at": now.replace(microsecond=0), "entities": ["AI 应用", "融资", "客户留存"]},
+        {"source_id": "anthropic", "url": "https://www.anthropic.com/research/context-management", "title": "更好的上下文管理可能比更大的模型更重要", "summary": "研究者将注意力放在任务拆解、上下文压缩和记忆策略。", "channel": "模型与产品", "published_at": now.replace(microsecond=0), "entities": ["上下文管理", "模型优化", "记忆"]},
+        {"source_id": "aws-ml", "url": "https://aws.amazon.com/machine-learning/case-studies/retail-knowledge", "title": "零售企业用生成式 AI 重做客服知识库", "summary": "项目重点在知识更新、人工复核和效果监控组成的完整闭环。", "channel": "企业应用", "published_at": now.replace(microsecond=0), "entities": ["零售", "客服", "知识库"]},
+        {"source_id": "meta-ai", "url": "https://ai.meta.com/blog/creative-tools", "title": "社交平台把生成式 AI 工具前置到创作入口", "summary": "图片编辑和短视频辅助开始以低门槛方式嵌入已有创作流程。", "channel": "模型与产品", "published_at": now.replace(microsecond=0), "entities": ["生成式 AI", "内容创作", "平台"]},
     ]
     store = InMemoryStore()
     store.seed(sources, raw_articles)

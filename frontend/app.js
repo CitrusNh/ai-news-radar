@@ -1,4 +1,4 @@
-const NEWS = [
+const FALLBACK_NEWS = [
   { id: 1, channel: "模型与产品", type: "MODEL RELEASE", color: "", time: "35 分钟前", source: "OpenAI", sourceMark: "O", sourceColor: "green", sources: 4, heat: 96, relevance: 94, title: "OpenAI 发布新一代推理模型，复杂任务准确率再上一个台阶", summary: "新模型针对长链路推理与工具调用做了系统性优化，首批 API 能力已向开发者开放。", facts: ["支持更长上下文与多步任务规划", "开发者预览版现已开放申请", "定价策略仍待官方进一步说明"], why: "你关注了“推理模型”；该事件由 4 个公开来源交叉报道。", entities: ["OpenAI", "推理模型", "API"], uncertainty: "中", detail: "官方公告确认了模型的推理能力与开发者预览计划，但完整定价和企业可用范围仍需等待后续说明。", link: "https://openai.com/news/" },
   { id: 2, channel: "企业应用", type: "ENTERPRISE", color: "coral", time: "1 小时前", source: "The Information", sourceMark: "T", sourceColor: "coral", sources: 3, heat: 91, relevance: 89, title: "制造业 AI 采购从“试点”进入规模化，企业开始重算 ROI", summary: "多家制造企业将 AI 项目从创新部门移交到业务线，采购关注点转向可量化的效率收益。", facts: ["质检与客服仍是最常见落地场景", "采购周期比去年平均缩短约 20%", "数据治理成为部署前置条件"], why: "你关注了“企业应用”；这是今天最具落地信号的事件之一。", entities: ["制造业", "企业采购", "ROI"], uncertainty: "低", detail: "公开报道和企业案例都显示，AI 采购正在从概念验证走向业务部门负责的长期项目。", link: "https://www.theinformation.com/" },
   { id: 3, channel: "政策安全", type: "POLICY / SAFETY", color: "yellow", time: "2 小时前", source: "MIT Technology Review", sourceMark: "M", sourceColor: "", sources: 5, heat: 88, relevance: 82, title: "全球 AI 安全评测开始趋向统一，模型厂商面临新的透明度要求", summary: "监管机构与研究组织正在推动更可比的评测框架，重点关注高风险能力的披露方式。", facts: ["评测指标从单项能力扩展到系统风险", "企业需保留模型版本与测试记录", "标准仍处在协商与试点阶段"], why: "5 个来源指向同一趋势，值得提前关注合规准备。", entities: ["AI 安全", "模型评测", "监管"], uncertainty: "中", detail: "目前更像是多个监管和研究组织正在形成的共同方向，而非一项已经生效的统一法规。", link: "https://www.technologyreview.com/" },
@@ -31,6 +31,8 @@ const SUBCHANNELS = {
   体育: [{ id: "全部", label: "全部", count: 0 }, { id: "足球", label: "足球", count: 0 }, { id: "篮球", label: "篮球", count: 0 }, { id: "综合赛事", label: "综合赛事", count: 0 }],
   游戏: [{ id: "全部", label: "全部", count: 0 }, { id: "主机与 PC", label: "主机与 PC", count: 0 }, { id: "手游", label: "手游", count: 0 }, { id: "电竞", label: "电竞", count: 0 }]
 };
+const API_BASE = window.SIGNALSCOPE_API_BASE || "http://127.0.0.1:8000/api/v1";
+let usingApi = false;
 const state = { domain: "AI", channel: "全部", search: "", sort: "heat", saved: new Set(JSON.parse(localStorage.getItem("signal-saved") || "[]")), read: new Set(JSON.parse(localStorage.getItem("signal-read") || "[]")), muted: new Set(JSON.parse(localStorage.getItem("signal-muted") || "[]")), keywords: new Set(JSON.parse(localStorage.getItem("signal-keywords") || '["AI Agent"]')), sourceMutes: new Set(JSON.parse(localStorage.getItem("signal-source-mutes") || "[]")) };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -43,9 +45,44 @@ function saveState() {
   localStorage.setItem("signal-source-mutes", JSON.stringify([...state.sourceMutes]));
 }
 
-function visibleNews() {
+function getAnonymousUserId() {
+  let id = localStorage.getItem("signal-user-id");
+  if (!id) { id = `web-${Math.random().toString(36).slice(2, 10)}`; localStorage.setItem("signal-user-id", id); }
+  return id;
+}
+
+function formatRelativeTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "刚刚";
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (minutes < 60) return `${minutes || 1} 分钟前`;
+  return `${Math.floor(minutes / 60)} 小时前`;
+}
+
+function apiEventToNews(event) {
+  const enrichment = event.enrichment || {};
+  const sourceName = event.source_names?.[0] || event.source_ids?.[0] || "SignalScope 来源";
+  return { id: event.id, channel: event.channel, type: (enrichment.topic_labels?.[1] || event.channel || "SIGNAL").toUpperCase(), color: event.channel === "政策安全" ? "yellow" : event.channel === "资本市场" || event.channel === "企业应用" ? "coral" : "", time: formatRelativeTime(event.last_seen_at), source: sourceName, sourceMark: sourceName.slice(0, 1).toUpperCase(), sourceColor: event.channel === "资本市场" || event.channel === "企业应用" ? "coral" : "green", sources: event.source_count || 1, heat: Math.round(event.global_heat_score || 0), relevance: Math.round(event.personal_relevance || 0), title: event.title, summary: enrichment.summary || "摘要暂未生成，请查看原文。", facts: enrichment.key_facts?.slice(0, 3) || [], why: enrichment.why_it_matters || "该事件已进入雷达，建议查看来源核实。", entities: (enrichment.entities || []).map(entity => entity.name), uncertainty: enrichment.uncertainty_level || "中", detail: enrichment.summary || "摘要暂未生成，请查看原文。", link: event.source_urls?.[0] || "#" };
+}
+
+async function loadNewsFromApi() {
+  const params = new URLSearchParams({ domain: state.domain === "全部" ? "AI" : state.domain, sort: state.sort });
+  if (state.channel !== "全部") params.set("channel", state.channel);
+  if (state.search.trim()) params.set("keyword", state.search.trim());
+  try {
+    const response = await fetch(`${API_BASE}/events?${params.toString()}`, { headers: { "X-Anonymous-User": getAnonymousUserId() } });
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    usingApi = true;
+    return (await response.json()).map(apiEventToNews);
+  } catch {
+    usingApi = false;
+    return null;
+  }
+}
+
+function visibleNews(source = FALLBACK_NEWS) {
   if (state.domain !== "AI" && state.domain !== "全部") return [];
-  let list = NEWS.filter(item => !state.muted.has(item.id) && !state.sourceMutes.has(item.source));
+  let list = source.filter(item => !state.muted.has(item.id) && !state.sourceMutes.has(item.source));
   if (state.domain === "AI" && state.channel !== "全部") list = list.filter(item => item.channel === state.channel);
   if (state.search.trim()) { const q = state.search.toLowerCase(); list = list.filter(item => [item.title, item.summary, item.source, ...item.entities, ...item.facts].join(" ").toLowerCase().includes(q)); }
   if (state.sort === "fresh") list.sort((a,b) => a.id - b.id);
@@ -70,7 +107,7 @@ function cardTemplate(item) {
 }
 
 function render() {
-  const list = visibleNews();
+  const list = visibleNews(window.__signalNews || FALLBACK_NEWS);
   renderDomainTabs();
   renderChannelTabs();
   $("#newsFeed").innerHTML = list.map(cardTemplate).join("");
@@ -82,7 +119,7 @@ function render() {
   $("#mutedCount").textContent = state.muted.size + state.sourceMutes.size;
   $("#filterBadge").textContent = state.keywords.size + state.sourceMutes.size;
   $$(".card-action").forEach(btn => btn.addEventListener("click", handleAction));
-  $$(".news-card").forEach(card => card.addEventListener("dblclick", () => openDetail(Number(card.dataset.id))));
+  $$(".news-card").forEach(card => card.addEventListener("dblclick", () => openDetail(card.dataset.id)));
 }
 
 function renderDomainTabs() {
@@ -107,21 +144,25 @@ function selectDomain(domain) {
   $("#searchInput").value = "";
   if (domain !== "AI" && domain !== "全部") toast(`${domain} 频道正在准备中，先为你保留导航入口`);
   else toast(domain === "全部" ? "已切换到跨主题视图" : "已切换到 AI 主题");
-  render();
+  refreshNews();
 }
 
 function handleAction(event) {
   event.stopPropagation();
-  const button = event.currentTarget, card = button.closest(".news-card"), id = Number(card.dataset.id), action = button.dataset.action;
+  const button = event.currentTarget, card = button.closest(".news-card"), id = card.dataset.id, action = button.dataset.action;
   if (action === "save") { state.saved.has(id) ? state.saved.delete(id) : state.saved.add(id); toast(state.saved.has(id) ? "已收藏这条信号" : "已取消收藏"); }
   if (action === "read") { state.read.has(id) ? state.read.delete(id) : state.read.add(id); toast(state.read.has(id) ? "已标记为已读" : "已恢复为未读"); }
   if (action === "mute") { state.muted.add(id); toast("已隐藏这条信号，可在偏好中调整"); }
   if (action === "open") openDetail(id);
-  saveState(); render();
+  saveState();
+  if (usingApi && ["save", "read"].includes(action)) {
+    fetch(`${API_BASE}/events/${encodeURIComponent(id)}/actions`, { method: "POST", headers: { "Content-Type": "application/json", "X-Anonymous-User": getAnonymousUserId() }, body: JSON.stringify({ action_type: action === "save" ? (state.saved.has(id) ? "saved" : "unsaved") : (state.read.has(id) ? "read" : "unread") }) }).catch(() => {});
+  }
+  render();
 }
 
 function openDetail(id) {
-  const item = NEWS.find(n => n.id === id); if (!item) return;
+  const item = (window.__signalNews || FALLBACK_NEWS).find(n => String(n.id) === String(id)) || FALLBACK_NEWS.find(n => String(n.id) === String(id)); if (!item) return;
   $("#modalBody").innerHTML = `<span class="detail-kicker">${item.type} · ${item.time} · ${item.sources} 个来源</span><h2>${item.title}</h2><p class="detail-summary">${item.detail}</p><div class="detail-block"><h4>关键事实</h4><ul>${item.facts.map(f => `<li>${f}</li>`).join("")}</ul></div><div class="detail-block"><h4>为什么值得关注</h4><p class="detail-summary">${item.why}</p></div><div class="detail-block"><h4>来源与核实</h4><div class="detail-source"><span>${item.source} · 信息不确定性：${item.uncertainty}</span><a href="${item.link}" target="_blank" rel="noreferrer">查看原文 ↗</a></div></div>`;
   $("#detailModal").classList.remove("hidden");
 }
@@ -131,21 +172,27 @@ function toast(message) { const el = $("#toast"); el.textContent = message; el.c
 function openFilter() { $$("[data-keyword]").forEach(chip => chip.classList.toggle("active", state.keywords.has(chip.dataset.keyword))); $$("[data-source]").forEach(chip => chip.classList.toggle("active", state.sourceMutes.has(chip.dataset.source))); $("#filterModal").classList.remove("hidden"); }
 function closeModals() { $$(".modal-backdrop").forEach(modal => modal.classList.add("hidden")); }
 
-$("#searchInput").addEventListener("input", event => { state.search = event.target.value; render(); });
-$("#sortSelect").addEventListener("change", event => { state.sort = event.target.value; render(); });
+$("#searchInput").addEventListener("input", event => { state.search = event.target.value; refreshNews(); });
+$("#sortSelect").addEventListener("change", event => { state.sort = event.target.value; refreshNews(); });
 $("#filterButton").addEventListener("click", openFilter);
 $("#filterClose").addEventListener("click", closeModals); $("#modalClose").addEventListener("click", closeModals);
 $(".modal-backdrop").addEventListener("click", event => { if (event.target === event.currentTarget) closeModals(); });
-$("#applyFilters").addEventListener("click", () => { state.keywords = new Set($$("[data-keyword].active").map(chip => chip.dataset.keyword)); state.sourceMutes = new Set($$("[data-source].active").map(chip => chip.dataset.source)); saveState(); closeModals(); toast("偏好已保存，雷达已更新"); render(); });
+$("#applyFilters").addEventListener("click", async () => { state.keywords = new Set($$("[data-keyword].active").map(chip => chip.dataset.keyword)); state.sourceMutes = new Set($$("[data-source].active").map(chip => chip.dataset.source)); saveState(); if (usingApi) { try { await fetch(API_BASE + "/preferences", { method: "PUT", headers: { "Content-Type": "application/json", "X-Anonymous-User": getAnonymousUserId() }, body: JSON.stringify({ domains: [state.domain === "全部" ? "AI" : state.domain], channels: [], keywords: [...state.keywords], muted_sources: [...state.sourceMutes] }) }); } catch {} } closeModals(); toast("偏好已保存，雷达已更新"); await refreshNews(); });
 $("#keywordChips").addEventListener("click", event => { const chip = event.target.closest(".pref-chip"); if (chip) chip.classList.toggle("active"); });
 $$('[data-source]').forEach(chip => chip.addEventListener("click", () => chip.classList.toggle("active")));
-$$('.trend-item').forEach(item => item.addEventListener("click", () => { $("#searchInput").value = item.dataset.query; state.search = item.dataset.query; render(); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看：${item.dataset.query}`); }));
-$("#clearFilters").addEventListener("click", () => { state.domain = "AI"; state.channel = "全部"; state.search = ""; $("#searchInput").value = ""; render(); });
-$("#viewSaved").addEventListener("click", () => { const saved = NEWS.filter(item => state.saved.has(item.id)); if (!saved.length) { toast("还没有收藏，先收藏几条感兴趣的信号吧"); return; } $("#searchInput").value = ""; state.search = ""; $("#newsFeed").innerHTML = saved.map(cardTemplate).join(""); $$(".card-action").forEach(btn => btn.addEventListener("click", handleAction)); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看 ${saved.length} 条收藏`); });
+$$('.trend-item').forEach(item => item.addEventListener("click", async () => { $("#searchInput").value = item.dataset.query; state.search = item.dataset.query; await refreshNews(); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看：${item.dataset.query}`); }));
+$("#clearFilters").addEventListener("click", async () => { state.domain = "AI"; state.channel = "全部"; state.search = ""; $("#searchInput").value = ""; await refreshNews(); });
+$("#viewSaved").addEventListener("click", () => { const saved = (window.__signalNews || FALLBACK_NEWS).filter(item => state.saved.has(item.id)); if (!saved.length) { toast("还没有收藏，先收藏几条感兴趣的信号吧"); return; } $("#searchInput").value = ""; state.search = ""; $("#newsFeed").innerHTML = saved.map(cardTemplate).join(""); $$(".card-action").forEach(btn => btn.addEventListener("click", handleAction)); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看 ${saved.length} 条收藏`); });
 $("#resetLibrary").addEventListener("click", () => { state.saved.clear(); state.read.clear(); state.muted.clear(); state.sourceMutes.clear(); saveState(); render(); toast("本地记录已清空"); });
 $("#profileButton").addEventListener("click", openFilter);
 $("#themeToggle").addEventListener("click", () => { document.body.classList.toggle("dark"); $("#themeToggle").textContent = document.body.classList.contains("dark") ? "☾" : "☼"; });
-$("#loadMore").addEventListener("click", () => toast("这是 Demo 版本，更多信号将在接入数据源后持续更新"));
+$("#loadMore").addEventListener("click", () => toast(usingApi ? "已展示当前 API 返回的全部信号" : "这是 Demo 版本，更多信号将在接入数据源后持续更新"));
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeModals(); });
 
-render();
+async function refreshNews() {
+  const apiNews = await loadNewsFromApi();
+  window.__signalNews = apiNews || FALLBACK_NEWS;
+  render();
+}
+
+refreshNews();

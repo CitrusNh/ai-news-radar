@@ -47,6 +47,8 @@ class EventOut(BaseModel):
     article_count: int
     source_count: int
     source_ids: list[str]
+    source_names: list[str] = Field(default_factory=list)
+    source_urls: list[str] = Field(default_factory=list)
     first_seen_at: datetime
     last_seen_at: datetime
     global_heat_score: float
@@ -103,4 +105,3 @@ class RunOut(BaseModel):
     status: str
     source_count: int
     article_count: int
-

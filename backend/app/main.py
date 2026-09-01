@@ -25,10 +25,12 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="X-Anonymous-User is too long")
         return value
 
-    def event_out(event) -> EventOut:
+    def event_out(event, store: InMemoryStore) -> EventOut:
         payload = model_to_dict(event)
         payload["article_count"] = len(event.article_ids)
         payload["source_count"] = len(event.source_ids)
+        payload["source_names"] = [store.sources[source_id].name for source_id in event.source_ids if source_id in store.sources]
+        payload["source_urls"] = [store.articles[article_id].canonical_url for article_id in event.article_ids if article_id in store.articles and not store.articles[article_id].duplicate_of]
         return EventOut.model_validate(payload)
 
     @app.get("/api/v1/health")
@@ -54,7 +56,7 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
         if domain == "全部":
             domain = "AI"
         events = store.list_events(user_id, domain=domain, channel=channel, keyword=keyword, sort=sort)
-        return [event_out(event) for event in events]
+        return [event_out(event, store) for event in events]
 
     @app.get("/api/v1/events/{event_id}", response_model=EventOut)
     def get_event(event_id: str, store: InMemoryStore = Depends(get_store), user_id: str = Depends(anonymous_user)) -> EventOut:
@@ -64,7 +66,7 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
         # Calculate the same personalized score as the list endpoint.
         event_list = store.list_events(user_id, domain=event.domain, channel=event.channel)
         selected = next((item for item in event_list if item.id == event_id), event)
-        return event_out(selected)
+        return event_out(selected, store)
 
     @app.get("/api/v1/preferences", response_model=PreferenceOut)
     def get_preferences(user_id: str = Depends(anonymous_user), store: InMemoryStore = Depends(get_store)) -> PreferenceOut:
@@ -84,7 +86,7 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/library", response_model=list[EventOut])
     def library(type: str = Query(default="saved", pattern="^(saved|read)$"), user_id: str = Depends(anonymous_user), store: InMemoryStore = Depends(get_store)) -> list[EventOut]:
-        return [event_out(event) for event in store.library(user_id, action_type=type)]
+        return [event_out(event, store) for event in store.library(user_id, action_type=type)]
 
     @app.get("/api/v1/admin/source-health", response_model=list[SourceHealthOut])
     def source_health(store: InMemoryStore = Depends(get_store)) -> list[SourceHealthOut]:
