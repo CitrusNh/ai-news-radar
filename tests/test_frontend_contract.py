@@ -35,7 +35,7 @@ def test_readme_records_the_verified_public_release():
     for phrase in [
         "https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/",
         "公网验收结果",
-        "46 passed",
+        "47 passed",
         "94.70%",
         "GitHub Actions CI",
         "API 文档仅供本地访问",

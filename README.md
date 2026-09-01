@@ -50,7 +50,7 @@ Streamlit Community Cloud
 - 收藏与已读已实际写入 Neon PostgreSQL，并在重新打开同一访客链接后保持；
 - 390 × 844 手机视口和 1440 × 900 电脑视口均无横向溢出；
 - Streamlit 公网日志未发现 Traceback 或应用异常；浏览器仅观察到托管平台统计请求失败，不影响业务功能；
-- 本地 `46 passed`，后端覆盖率 `94.70%`；[GitHub Actions CI](https://github.com/CitrusNh/ai-news-radar/actions/runs/33477217379) 通过。
+- 本地 `47 passed`，后端覆盖率 `94.70%`；[GitHub Actions CI](https://github.com/CitrusNh/ai-news-radar/actions/runs/33478063787) 通过。
 
 在 [Streamlit Community Cloud](https://share.streamlit.io/) 创建应用，填写：
 
@@ -173,7 +173,7 @@ pytest -q
 
 测试命令会执行后端单元测试、API 集成测试、Streamlit 服务层测试和部署契约测试，并要求后端代码覆盖率不低于 80%。
 
-最近一次完整验证结果：`46 passed`，后端代码覆盖率 `94.70%`，GitHub Actions CI 通过。
+最近一次完整验证结果：`47 passed`，后端代码覆盖率 `94.70%`，GitHub Actions CI 通过。
 
 ```powershell
 node --check frontend/app.js
