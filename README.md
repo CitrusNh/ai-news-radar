@@ -19,6 +19,19 @@ uvicorn app.main:app --app-dir backend --reload
 
 打开 `http://127.0.0.1:8000/docs` 查看 API 文档。
 
+也可以在仓库根目录运行：
+
+```powershell
+.\start-demo.ps1
+```
+
+脚本会在后台启动前端和后端。定时 RSS 任务默认关闭；只有在来源通过审核并设置环境变量后才建议启用：
+
+```powershell
+$env:SIGNALSCOPE_SCHEDULER_ENABLED="true"
+$env:SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS="14400"
+```
+
 ## 本地启动（前端 Demo）
 
 ```powershell

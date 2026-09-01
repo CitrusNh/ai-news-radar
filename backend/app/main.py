@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,15 +9,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from .ingestion import validate_feed_url
 from .models import Source, UserAction, UserPreference, model_to_dict
 from .schemas import ActionIn, ActionOut, EventOut, PreferenceIn, PreferenceOut, RunOut, SourceDetailOut, SourceHealthOut, SourceIn
+from .scheduler import IntervalScheduler
 from .store import InMemoryStore
 from .sqlite_store import persistent_demo_store
 from .workflow import IngestionWorkflow
 
 
 def create_app(store: InMemoryStore | None = None) -> FastAPI:
-    app = FastAPI(title="SignalScope AI API", version="0.1.0", description="AI 热点摘要雷达 MVP API")
+    selected_store = store or persistent_demo_store()
+    scheduler_enabled = os.getenv("SIGNALSCOPE_SCHEDULER_ENABLED", "false").lower() in {"1", "true", "yes"}
+    scheduler_interval = int(os.getenv("SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS", "14400"))
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.scheduler.start()
+        yield
+        app.state.scheduler.stop()
+
+    app = FastAPI(title="SignalScope AI API", version="0.1.0", description="AI 热点摘要雷达 MVP API", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "PUT"], allow_headers=["*"])
-    app.state.store = store or persistent_demo_store()
+    app.state.store = selected_store
+    app.state.scheduler = IntervalScheduler(lambda: IngestionWorkflow(app.state.store).run(), scheduler_interval, scheduler_enabled)
 
     def get_store() -> InMemoryStore:
         return app.state.store
@@ -41,8 +54,8 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
         return EventOut.model_validate(payload)
 
     @app.get("/api/v1/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "service": "signalscope-api"}
+    def health() -> dict[str, object]:
+        return {"status": "ok", "service": "signalscope-api", "storage": type(app.state.store).__name__, "scheduler": {"enabled": app.state.scheduler.state.enabled, "running": app.state.scheduler.state.running, "interval_seconds": app.state.scheduler.state.interval_seconds}}
 
     @app.get("/api/v1/domains")
     def domains(store: InMemoryStore = Depends(get_store)) -> list[dict[str, object]]:
