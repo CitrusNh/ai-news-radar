@@ -12,7 +12,7 @@ def test_frontend_keeps_required_demo_surfaces():
 
 
 def test_frontend_uses_api_with_local_fallback():
-    assert "http://127.0.0.1:8000/api/v1" in APP
+    assert 'window.SIGNALSCOPE_API_BASE || "/api/v1"' in APP
     assert "loadNewsFromApi" in APP
     assert "FALLBACK_NEWS" in APP
     assert "apiNews || FALLBACK_NEWS" in APP

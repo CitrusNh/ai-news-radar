@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .ingestion import validate_feed_url
 from .models import Source, UserAction, UserPreference, model_to_dict
@@ -15,7 +18,11 @@ from .sqlite_store import persistent_demo_store
 from .workflow import IngestionWorkflow
 
 
-def create_app(store: InMemoryStore | None = None) -> FastAPI:
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+
+def create_app(store: InMemoryStore | None = None, frontend_dir: Path | None = None) -> FastAPI:
     selected_store = store or persistent_demo_store()
     scheduler_enabled = os.getenv("SIGNALSCOPE_SCHEDULER_ENABLED", "false").lower() in {"1", "true", "yes"}
     scheduler_interval = int(os.getenv("SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS", "14400"))
@@ -30,6 +37,7 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "PUT"], allow_headers=["*"])
     app.state.store = selected_store
     app.state.scheduler = IntervalScheduler(lambda: IngestionWorkflow(app.state.store).run(), scheduler_interval, scheduler_enabled)
+    web_dir = frontend_dir or FRONTEND_DIR
 
     def get_store() -> InMemoryStore:
         return app.state.store
@@ -143,6 +151,20 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
         return RunOut(run_id=run.id, status=run.status, source_count=run.source_count, article_count=run.article_count, error_count=run.error_count, errors=run.errors, started_at=run.started_at, finished_at=run.finished_at)
+
+    if web_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=web_dir), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        def website_home() -> FileResponse:
+            return FileResponse(web_dir / "index.html")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        def website_fallback(path: str) -> FileResponse:
+            candidate = (web_dir / path).resolve()
+            if web_dir.resolve() in candidate.parents and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(web_dir / "index.html")
 
     return app
 

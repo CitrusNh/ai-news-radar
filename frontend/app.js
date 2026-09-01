@@ -31,7 +31,7 @@ const SUBCHANNELS = {
   体育: [{ id: "全部", label: "全部", count: 0 }, { id: "足球", label: "足球", count: 0 }, { id: "篮球", label: "篮球", count: 0 }, { id: "综合赛事", label: "综合赛事", count: 0 }],
   游戏: [{ id: "全部", label: "全部", count: 0 }, { id: "主机与 PC", label: "主机与 PC", count: 0 }, { id: "手游", label: "手游", count: 0 }, { id: "电竞", label: "电竞", count: 0 }]
 };
-const API_BASE = window.SIGNALSCOPE_API_BASE || "http://127.0.0.1:8000/api/v1";
+const API_BASE = window.SIGNALSCOPE_API_BASE || "/api/v1";
 let usingApi = false;
 const storedSet = (key, fallback = "[]") => new Set(JSON.parse(localStorage.getItem(key) || fallback).map(String));
 const state = { domain: "AI", channel: "全部", search: "", sort: "heat", saved: storedSet("signal-saved"), read: storedSet("signal-read"), muted: storedSet("signal-muted"), keywords: storedSet("signal-keywords", '["AI Agent"]'), sourceMutes: storedSet("signal-source-mutes") };
