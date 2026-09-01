@@ -5,12 +5,12 @@
 当前仓库包含：
 
 - `frontend/`：与后端 API 联通的公共网站 Demo，后端不可用时自动回退本地样例；
-- `backend/`：SQLite 持久化、来源注册、RSS/Atom 获取、标准化、去重、事件聚类、热点评分、用户行为和 API 服务；
+- `backend/`：SQLite/PostgreSQL 持久化、来源注册、RSS/Atom 获取、标准化、去重、事件聚类、热点评分、用户行为和 API 服务；
 - `tests/`：后端单元测试、接口测试和前端关键行为说明。
 
 ## 当前已实现
 
-- SQLite 持久化，服务重启后事件、偏好、收藏和已读状态可以恢复；
+- 本地使用 SQLite，公网使用 PostgreSQL；服务重启或重新部署后事件、来源、任务、偏好、收藏和已读状态可以恢复；
 - RSS 2.0 与 Atom 解析；
 - 来源必须显式通过 robots 和合规审核后才能进入自动任务；
 - 拒绝 localhost、内网和保留 IP 地址，降低 SSRF 风险；
@@ -70,17 +70,17 @@ docker compose down
 
 ## 部署为所有人可访问的网站
 
-仓库包含 `render.yaml`，可以部署为单一公网 Web Service：用户访问一个 HTTPS 地址即可使用，不需要安装 Python、Docker，也不需要分别打开前端和后端。
+仓库包含 `render.yaml`，可以部署为单一公网 Web Service：用户访问一个 HTTPS 地址即可使用，不需要安装 Python、Docker，也不需要分别打开前端和后端。公网部署必须配置免费或付费的持久 PostgreSQL `DATABASE_URL`，不能依赖 Render 临时文件系统保存 SQLite。
 
 部署前需要先把这个仓库推送到你自己的 GitHub/GitLab，再在 Render 中选择 Blueprint 部署。部署配置会：
 
 - 使用 Docker 构建一体化网站；
 - 自动创建管理密钥；
-- 将 `/app/data/runtime` 挂载为持久化磁盘；
+- 通过 `DATABASE_URL` 连接外部 PostgreSQL，持久保存事件、来源、任务记录及用户状态；
 - 使用 `/api/v1/health` 做健康检查；
 - 每次仓库提交后自动重新部署。
 
-部署完成后会得到类似 `https://signalscope-ai.onrender.com` 的公开网址。注意：持久化磁盘通常需要云平台的付费实例；免费临时文件系统会在重启后丢失 SQLite 数据。
+部署完成后会得到类似 `https://signalscope-ai.onrender.com` 的公开网址。Render Web Service 的临时文件系统不会承载正式数据；若未配置 PostgreSQL，不能把该部署视为完整上线。
 
 CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测试、前端语法检查和 Docker 镜像构建。
 

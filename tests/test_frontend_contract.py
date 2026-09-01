@@ -26,7 +26,7 @@ def test_frontend_maps_api_event_fields_needed_by_cards():
 
 def test_readme_documents_persistence_safety_and_admin_workflow():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for phrase in ["SQLite 持久化", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs", "所有人可访问的网站"]:
+    for phrase in ["PostgreSQL", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs", "所有人可访问的网站"]:
         assert phrase in readme
 
 
@@ -37,7 +37,7 @@ def test_ci_runs_tests_frontend_check_and_container_build():
     assert "docker/build-push-action@v6" in workflow
 
 
-def test_container_contract_serves_one_site_with_persistent_data():
+def test_container_contract_serves_one_site_with_external_persistent_data():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
     assert "USER signalscope" in dockerfile
@@ -47,5 +47,7 @@ def test_container_contract_serves_one_site_with_persistent_data():
     assert "signalscope-data:/app/data/runtime" in compose
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert "healthCheckPath: /api/v1/health" in render
-    assert "mountPath: /app/data/runtime" in render
+    assert "key: DATABASE_URL" in render
+    assert "sync: false" in render
+    assert "mountPath: /app/data/runtime" not in render
     assert "generateValue: true" in render

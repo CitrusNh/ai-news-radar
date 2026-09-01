@@ -6,15 +6,11 @@ services:
     healthCheckPath: /api/v1/health
     autoDeployTrigger: commit
     envVars:
-      - key: SIGNALSCOPE_DATABASE_PATH
-        value: /app/data/runtime/signalscope.db
+      - key: DATABASE_URL
+        sync: false
       - key: SIGNALSCOPE_ADMIN_KEY
         generateValue: true
       - key: SIGNALSCOPE_SCHEDULER_ENABLED
         value: "false"
       - key: SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS
         value: "14400"
-    disk:
-      name: signalscope-data
-      mountPath: /app/data/runtime
-      sizeGB: 1

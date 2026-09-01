@@ -25,7 +25,8 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 def create_app(store: InMemoryStore | None = None, frontend_dir: Path | None = None) -> FastAPI:
     database_path = os.getenv("SIGNALSCOPE_DATABASE_PATH", "data/runtime/signalscope.db")
-    selected_store = store or persistent_demo_store(database_path)
+    database_url = os.getenv("DATABASE_URL")
+    selected_store = store or persistent_demo_store(database_path, database_url)
     scheduler_enabled = os.getenv("SIGNALSCOPE_SCHEDULER_ENABLED", "false").lower() in {"1", "true", "yes"}
     scheduler_interval = int(os.getenv("SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS", "14400"))
 
