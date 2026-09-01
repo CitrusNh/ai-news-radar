@@ -70,14 +70,15 @@ class InMemoryStore:
             return action
 
     def library(self, anonymous_user_id: str, action_type: str = "saved") -> list[Event]:
-        active_ids: set[str] = set()
+        latest_actions: dict[str, str] = {}
         for action in self.actions:
             if action.anonymous_user_id != anonymous_user_id:
                 continue
-            if action.action_type == action_type:
-                active_ids.add(action.event_id)
-            elif action.action_type in {"unsaved", "unread"} and action_type == "saved":
-                active_ids.discard(action.event_id)
+            if action_type == "saved" and action.action_type in {"saved", "unsaved"}:
+                latest_actions[action.event_id] = action.action_type
+            elif action_type == "read" and action.action_type in {"read", "unread"}:
+                latest_actions[action.event_id] = action.action_type
+        active_ids = {event_id for event_id, latest in latest_actions.items() if latest == action_type}
         return [self.events[event_id] for event_id in active_ids if event_id in self.events]
 
 
