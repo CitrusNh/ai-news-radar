@@ -37,3 +37,16 @@ def test_workflow_is_idempotent_for_existing_urls():
     assert IngestionWorkflow(store, fetcher).run().article_count == 1
     assert IngestionWorkflow(store, fetcher).run().article_count == 0
     assert len(store.articles) == 1
+
+
+def test_incremental_workflow_preserves_existing_event_ids():
+    store = InMemoryStore()
+    source = Source("ok", "来源", feed_url="https://example.com/feed", robots_status="allowed", default_channel="模型与产品", compliance_status="approved")
+    store.sources[source.id] = source
+    first_item = {"source_id": source.id, "url": "https://example.com/first", "title": "OpenAI 推理模型发布", "summary": "摘要", "channel": source.default_channel, "published_at": datetime.now(timezone.utc), "entities": ["OpenAI", "推理模型"]}
+    second_item = {"source_id": source.id, "url": "https://example.com/second", "title": "OpenAI 发布推理模型更新", "summary": "补充", "channel": source.default_channel, "published_at": datetime.now(timezone.utc), "entities": ["OpenAI", "推理模型"]}
+    IngestionWorkflow(store, lambda current: FeedFetchResult(current.id, "success", [first_item])).run()
+    original_event_id = next(iter(store.events))
+    IngestionWorkflow(store, lambda current: FeedFetchResult(current.id, "success", [first_item, second_item])).run()
+    assert original_event_id in store.events
+    assert len(store.events[original_event_id].article_ids) == 2

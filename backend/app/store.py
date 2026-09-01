@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timezone
 from threading import RLock
@@ -42,6 +43,7 @@ class InMemoryStore:
 
         with self._lock:
             known_urls = {article.canonical_url for article in self.articles.values()}
+            previous_event_by_article = {article_id: event.id for event in self.events.values() for article_id in event.article_ids}
             added: list[Article] = []
             for raw in raw_articles:
                 source = self.sources[raw["source_id"]]
@@ -54,6 +56,15 @@ class InMemoryStore:
                 added.append(article)
             all_articles = deduplicate_articles(list(self.articles.values()))
             events = cluster_events(all_articles)
+            claimed_ids: set[str] = set()
+            for event in events:
+                previous_ids = Counter(previous_event_by_article[article_id] for article_id in event.article_ids if article_id in previous_event_by_article)
+                inherited_id = next((event_id for event_id, _count in previous_ids.most_common() if event_id not in claimed_ids), None)
+                event.id = inherited_id or f"evt-{uuid4().hex[:12]}"
+                claimed_ids.add(event.id)
+                for article_id in event.article_ids:
+                    if article_id in self.articles:
+                        self.articles[article_id].event_id = event.id
             self.events = {event.id: event for event in events}
             for event in events:
                 calculate_global_heat(event, self.articles, self.sources)
