@@ -15,10 +15,15 @@ from backend.app.streamlit_service import (
     active_action_ids,
     event_source_links,
     latest_update_at,
+    latest_ingestion_run,
     list_public_events,
+    manual_update_wait_seconds,
+    refresh_public_news,
     resolve_public_database_url,
     toggle_action,
 )
+from backend.app.store import IngestionBusyError
+from backend.app.workflow import IngestionCooldownError
 
 
 VISITOR_PATTERN = re.compile(r"^web-[a-z0-9]{8,40}$")
@@ -50,6 +55,11 @@ def format_update_time(value: datetime | None) -> str:
     if value is None:
         return "暂无数据"
     return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_wait_time(seconds: int) -> str:
+    minutes, remainder = divmod(max(0, seconds), 60)
+    return f"{minutes} 分 {remainder} 秒" if minutes else f"{remainder} 秒"
 
 
 def render_event(store, event, user_id: str, saved_ids: set[str], read_ids: set[str]) -> None:
@@ -102,7 +112,7 @@ def render_app() -> None:
         <div class="signal-hero">
           <div class="signal-kicker">LIVE RADAR · PUBLIC BETA</div>
           <h1>今天，什么值得<br><span style="color:#0f6b4f">被看见？</span></h1>
-          <p>把分散的 AI 新闻整理成可搜索、可收藏、可核实的行业信号。</p>
+          <p>把分散的 AI、科技、财经、娱乐、体育与游戏新闻，整理成可搜索、可收藏、可核实的热点信号。</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -112,6 +122,7 @@ def render_app() -> None:
         database_url = streamlit_database_url()
         with st.spinner("正在连接 Neon PostgreSQL 并加载热点…"):
             store = load_public_store(database_url)
+            store.reload()
     except PublicDatabaseConfigurationError as exc:
         st.error(str(exc))
         st.info("请在 Streamlit Community Cloud 的 App settings → Secrets 中配置 DATABASE_URL。")
@@ -122,6 +133,8 @@ def render_app() -> None:
 
     user_id = anonymous_user_id()
     latest = latest_update_at(store)
+    latest_run = latest_ingestion_run(store)
+    update_wait_seconds = manual_update_wait_seconds(store)
     metric_columns = st.columns(3)
     metric_columns[0].metric("精选事件", len(store.events))
     metric_columns[1].metric("活跃来源", len([source for source in store.sources.values() if source.active]))
@@ -131,6 +144,28 @@ def render_app() -> None:
         st.header("SignalScope AI")
         st.success("Neon PostgreSQL 已连接")
         st.caption("服务端持久化：事件、来源、抓取记录、收藏与已读")
+        if st.button(
+            "↻ 立即更新新闻" if not update_wait_seconds else "更新冷却中",
+            type="primary",
+            use_container_width=True,
+            disabled=bool(update_wait_seconds),
+        ):
+            try:
+                with st.spinner("正在获取公开新闻并更新热点…"):
+                    run = refresh_public_news(store)
+                st.session_state["update_notice"] = (
+                    f"更新完成：检查 {run.source_count} 个来源，新增 {run.article_count} 条，"
+                    f"{run.error_count} 个来源失败。"
+                )
+                st.rerun()
+            except IngestionCooldownError as exc:
+                st.warning(f"刚刚已经更新过，请在 {format_wait_time(exc.retry_after_seconds)} 后再试。")
+            except IngestionBusyError:
+                st.warning("另一项新闻更新正在进行，请稍后重新读取数据库。")
+            except Exception:
+                st.error("新闻更新失败，现有数据未受影响，请稍后重试。")
+        if update_wait_seconds:
+            st.caption(f"为避免重复抓取，{format_wait_time(update_wait_seconds)} 后可再次手动更新。")
         if st.button("↻ 重新读取数据库", use_container_width=True):
             try:
                 store.reload()
@@ -139,8 +174,18 @@ def render_app() -> None:
             except Exception:
                 st.error("刷新失败，已保留当前页面数据。")
         st.divider()
-        st.caption("自动 RSS 更新：当前关闭")
-        st.caption("仅接入审核通过的 RSS/Atom 来源，不抓取受限网页。")
+        if notice := st.session_state.pop("update_notice", None):
+            st.success(notice)
+        st.divider()
+        st.caption("自动更新：每天 08:00、22:00（北京时间）")
+        if latest_run:
+            st.caption(
+                f"最近任务：{format_update_time(latest_run.finished_at or latest_run.started_at)} · "
+                f"新增 {latest_run.article_count} 条 · 失败 {latest_run.error_count} 个来源"
+            )
+        else:
+            st.caption("最近任务：尚未执行")
+        st.caption("来源包括公开 RSS/Atom 与可直接访问的公开新闻列表页。")
 
     controls = st.columns([1.25, 1.25, 2, 1.15])
     collection = controls[0].selectbox("浏览内容", ["热点雷达", "我的收藏", "已读"])
@@ -166,8 +211,8 @@ def render_app() -> None:
     st.divider()
     st.subheader(f"{collection} · {len(events)} 条")
     if not events:
-        if domain != "全部" and domain != "AI":
-            st.info(f"{domain}频道即将接入，目前还没有已审核的公开来源。")
+        if domain != "全部":
+            st.info(f"{domain}频道当前没有匹配数据，可以点击侧边栏的“立即更新新闻”。")
         elif keyword:
             st.info("没有匹配该关键词的热点，试试公司名、模型名或更短的关键词。")
         elif collection == "我的收藏":
@@ -179,9 +224,11 @@ def render_app() -> None:
     else:
         for event in events:
             render_event(store, event, user_id, saved_ids, read_ids)
+        if len(events) == 60:
+            st.caption("当前展示排序后的前 60 条热点，可通过分类或关键词缩小范围。")
 
     st.divider()
-    st.caption("AI 生成摘要仅用于信息整理，请通过来源原文核实。公网版本由 Streamlit Community Cloud 托管，正式数据存储在 Neon PostgreSQL。")
+    st.caption("自动整理摘要仅用于信息索引，请通过来源原文核实。公网版本由 Streamlit Community Cloud 托管，正式数据存储在 Neon PostgreSQL。")
 
 
 if __name__ == "__main__":

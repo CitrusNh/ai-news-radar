@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from .database_store import normalize_database_url
-from .models import Event, UserAction, ensure_utc
+from .models import CrawlRun, Event, UserAction, ensure_utc
 from .store import InMemoryStore
+from .workflow import run_public_news_update
 
 
 PUBLIC_DOMAINS = ("全部", "AI", "科技", "财经", "娱乐", "体育", "游戏")
 PUBLIC_SORTS = {"综合热度": "heat", "最新发布": "fresh", "与你相关": "relevance"}
+MANUAL_UPDATE_COOLDOWN_SECONDS = 15 * 60
+PUBLIC_EVENT_LIMIT = 60
 
 
 class PublicDatabaseConfigurationError(RuntimeError):
@@ -55,10 +58,10 @@ def list_public_events(
         events = [event for event in events if event.id in active_ids]
 
     if sort == "fresh":
-        return sorted(events, key=lambda item: ensure_utc(item.last_seen_at), reverse=True)
+        return sorted(events, key=lambda item: ensure_utc(item.last_seen_at), reverse=True)[:PUBLIC_EVENT_LIMIT]
     if sort == "relevance":
-        return sorted(events, key=lambda item: (item.personal_relevance, item.global_heat_score), reverse=True)
-    return sorted(events, key=lambda item: (item.global_heat_score, item.personal_relevance), reverse=True)
+        return sorted(events, key=lambda item: (item.personal_relevance, item.global_heat_score), reverse=True)[:PUBLIC_EVENT_LIMIT]
+    return sorted(events, key=lambda item: (item.global_heat_score, item.personal_relevance), reverse=True)[:PUBLIC_EVENT_LIMIT]
 
 
 def active_action_ids(store: InMemoryStore, anonymous_user_id: str, action_type: str) -> set[str]:
@@ -85,3 +88,25 @@ def event_source_links(store: InMemoryStore, event: Event) -> list[tuple[str, st
 
 def latest_update_at(store: InMemoryStore) -> datetime | None:
     return max((ensure_utc(event.last_seen_at) for event in store.events.values()), default=None)
+
+
+def latest_ingestion_run(store: InMemoryStore) -> CrawlRun | None:
+    return max(store.runs.values(), key=lambda item: ensure_utc(item.started_at), default=None)
+
+
+def manual_update_wait_seconds(store: InMemoryStore, now: datetime | None = None) -> int:
+    completed = [
+        item for item in store.runs.values() if item.status in {"completed", "completed_with_errors"}
+    ]
+    if not completed:
+        return 0
+    latest = max(completed, key=lambda item: ensure_utc(item.started_at))
+    retry_at = ensure_utc(latest.started_at) + timedelta(seconds=MANUAL_UPDATE_COOLDOWN_SECONDS)
+    remaining = (retry_at - ensure_utc(now or datetime.now(timezone.utc))).total_seconds()
+    return max(0, int(remaining + 0.999))
+
+
+def refresh_public_news(store: InMemoryStore) -> CrawlRun:
+    """Register the built-in sources and run the same ingestion used by automation."""
+
+    return run_public_news_update(store, cooldown_seconds=MANUAL_UPDATE_COOLDOWN_SECONDS)

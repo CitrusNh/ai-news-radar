@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
-from threading import RLock
+from threading import Lock, RLock
+from typing import Iterator
 from uuid import uuid4
 
 from .models import Article, CrawlRun, Event, Source, UserAction, UserPreference
 from .processing import build_demo_enrichment, calculate_global_heat, cluster_events, deduplicate_articles, normalize_article, rank_events
+
+
+class IngestionBusyError(RuntimeError):
+    """Raised when another process or request already owns the update lock."""
 
 
 class InMemoryStore:
@@ -16,6 +22,7 @@ class InMemoryStore:
 
     def __init__(self) -> None:
         self._lock = RLock()
+        self._ingestion_lock = Lock()
         self.sources: dict[str, Source] = {}
         self.articles: dict[str, Article] = {}
         self.events: dict[str, Event] = {}
@@ -26,11 +33,37 @@ class InMemoryStore:
     def persist(self) -> None:
         """Persistence hook overridden by durable stores."""
 
+    def persist_ingestion_state(self) -> None:
+        """Persist source, article, and derived event state after ingestion."""
+
+        self.persist()
+
+    @contextmanager
+    def ingestion_guard(self) -> Iterator[None]:
+        if not self._ingestion_lock.acquire(blocking=False):
+            raise IngestionBusyError("another news update is already running")
+        try:
+            yield
+        finally:
+            self._ingestion_lock.release()
+
+    def reload_for_ingestion(self) -> None:
+        """Refresh shared state before a guarded ingestion run."""
+
     def upsert_source(self, source: Source) -> Source:
+        self.upsert_sources([source])
+        return source
+
+    def upsert_sources(self, sources: list[Source]) -> int:
         with self._lock:
-            self.sources[source.id] = source
-            self.persist()
-            return source
+            changed = 0
+            for source in sources:
+                if self.sources.get(source.id) != source:
+                    self.sources[source.id] = source
+                    changed += 1
+            if changed:
+                self.persist()
+            return changed
 
     def add_run(self, run: CrawlRun) -> CrawlRun:
         with self._lock:
@@ -54,23 +87,49 @@ class InMemoryStore:
                 known_urls.add(article.canonical_url)
                 self.articles[article.id] = article
                 added.append(article)
-            all_articles = deduplicate_articles(list(self.articles.values()))
-            events = cluster_events(all_articles)
-            claimed_ids: set[str] = set()
-            for event in events:
-                previous_ids = Counter(previous_event_by_article[article_id] for article_id in event.article_ids if article_id in previous_event_by_article)
-                inherited_id = next((event_id for event_id, _count in previous_ids.most_common() if event_id not in claimed_ids), None)
-                event.id = inherited_id or f"evt-{uuid4().hex[:12]}"
-                claimed_ids.add(event.id)
-                for article_id in event.article_ids:
-                    if article_id in self.articles:
-                        self.articles[article_id].event_id = event.id
-            self.events = {event.id: event for event in events}
-            for event in events:
-                calculate_global_heat(event, self.articles, self.sources)
-                build_demo_enrichment(event, self.articles)
-            self.persist()
+            self._rebuild_events(previous_event_by_article)
+            self.persist_ingestion_state()
             return added
+
+    def _rebuild_events(self, previous_event_by_article: dict[str, str] | None = None) -> None:
+        previous_event_by_article = previous_event_by_article or {
+            article_id: event.id for event in self.events.values() for article_id in event.article_ids
+        }
+        all_articles = deduplicate_articles(list(self.articles.values()))
+        events = cluster_events(all_articles)
+        claimed_ids: set[str] = set()
+        for event in events:
+            previous_ids = Counter(previous_event_by_article[article_id] for article_id in event.article_ids if article_id in previous_event_by_article)
+            inherited_id = next((event_id for event_id, _count in previous_ids.most_common() if event_id not in claimed_ids), None)
+            event.id = inherited_id or f"evt-{uuid4().hex[:12]}"
+            claimed_ids.add(event.id)
+            for article_id in event.article_ids:
+                if article_id in self.articles:
+                    self.articles[article_id].event_id = event.id
+        self.events = {event.id: event for event in events}
+        for event in events:
+            calculate_global_heat(event, self.articles, self.sources)
+            build_demo_enrichment(event, self.articles)
+
+    def purge_sources(self, source_ids: set[str] | frozenset[str]) -> int:
+        """Remove seeded source content after the first real update succeeds."""
+
+        with self._lock:
+            previous_event_by_article = {article_id: event.id for event in self.events.values() for article_id in event.article_ids}
+            article_ids = {article.id for article in self.articles.values() if article.source_id in source_ids}
+            for source_id in source_ids:
+                self.sources.pop(source_id, None)
+            for article_id in article_ids:
+                self.articles.pop(article_id, None)
+            if not article_ids:
+                return 0
+            self._rebuild_events(previous_event_by_article)
+            self._delete_source_content(source_ids, article_ids)
+            self.persist_ingestion_state()
+            return len(article_ids)
+
+    def _delete_source_content(self, source_ids: set[str] | frozenset[str], article_ids: set[str]) -> None:
+        """Durable stores override this cleanup hook."""
 
     def seed(self, sources: list[Source], raw_articles: list[dict]) -> None:
         with self._lock:

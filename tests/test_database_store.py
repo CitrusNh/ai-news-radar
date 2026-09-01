@@ -45,12 +45,15 @@ def test_relational_store_shares_user_state_without_rewriting_catalog(tmp_path):
     assert [event.id for event in second.library("shared-user")] == [event_id]
 
     second.set_preference(UserPreference("shared-user", keywords=["跨实例可见"]))
+    second.upsert_source(Source("source-2", "并发新增来源", feed_url="https://example.com/feed"))
     second.add_action(UserAction("second-user", event_id, "read"))
     first.add_run(CrawlRun("run-after-actions", datetime.now(timezone.utc), status="completed"))
     assert first.get_preference("shared-user").keywords == ["跨实例可见"]
     assert [event.id for event in first.library("second-user", action_type="read")] == [event_id]
     assert event_id in first.events
     assert event_id in second.events
+    first.reload()
+    assert "source-2" in first.sources
     first.close()
     second.close()
 
@@ -80,3 +83,30 @@ def test_persistent_store_uses_sqlite_locally_and_seeds_demo(tmp_path):
     store.reload()
     assert len(store.events) == 12
     store.close()
+
+
+def test_database_url_store_starts_empty_without_demo_seed(tmp_path):
+    database_url = f"sqlite:///{(tmp_path / 'public.db').as_posix()}"
+    store = persistent_store(database_url=database_url)
+    assert store.events == {}
+    store.close()
+
+
+def test_purge_sources_removes_durable_articles_and_events(tmp_path):
+    database_url = f"sqlite:///{(tmp_path / 'purge.db').as_posix()}"
+    store = RelationalStore(database_url)
+    store.seed(
+        [Source("demo", "演示"), Source("real", "真实")],
+        [
+            {"source_id": "demo", "url": "https://example.com/demo", "title": "演示新闻内容", "summary": "摘要", "channel": "AI", "published_at": datetime.now(timezone.utc)},
+            {"source_id": "real", "url": "https://example.com/real", "title": "真实新闻内容", "summary": "摘要", "channel": "AI", "published_at": datetime.now(timezone.utc)},
+        ],
+    )
+    assert store.purge_sources({"demo"}) == 1
+    store.close()
+
+    reopened = RelationalStore(database_url)
+    assert "demo" not in reopened.sources
+    assert {article.source_id for article in reopened.articles.values()} == {"real"}
+    assert all(event.title == "真实新闻内容" for event in reopened.events.values())
+    reopened.close()

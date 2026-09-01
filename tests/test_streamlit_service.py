@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.app.models import Source
+from backend.app.models import CrawlRun, Source
 from backend.app.store import InMemoryStore, demo_store
 from backend.app.streamlit_service import (
     PublicDatabaseConfigurationError,
@@ -10,6 +10,7 @@ from backend.app.streamlit_service import (
     event_source_links,
     latest_update_at,
     list_public_events,
+    manual_update_wait_seconds,
     resolve_public_database_url,
     toggle_action,
 )
@@ -52,3 +53,14 @@ def test_streamlit_detail_sources_and_update_status_reuse_store_data():
     assert latest_update_at(store) == published_at
     with pytest.raises(ValueError, match="saved and read"):
         toggle_action(store, "web-test-user", event.id, "shared")
+
+
+def test_manual_update_cooldown_uses_latest_successful_run():
+    store = InMemoryStore()
+    now = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
+    assert manual_update_wait_seconds(store, now) == 0
+    store.add_run(CrawlRun("failed", now, status="failed"))
+    assert manual_update_wait_seconds(store, now) == 0
+    store.add_run(CrawlRun("completed", now, status="completed"))
+    assert manual_update_wait_seconds(store, now) == 900
+    assert manual_update_wait_seconds(store, now.replace(minute=15)) == 0

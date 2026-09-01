@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from .models import Article, CrawlRun, Enrichment, Event, Source, UserAction, UserPreference, ensure_utc, model_to_dict
-from .store import InMemoryStore, demo_store
+from .store import IngestionBusyError, InMemoryStore, demo_store
 
 
 SCHEMA_STATEMENTS = (
@@ -19,6 +21,7 @@ SCHEMA_STATEMENTS = (
     "CREATE TABLE IF NOT EXISTS actions (id INTEGER PRIMARY KEY, anonymous_user_id VARCHAR(255) NOT NULL, event_id VARCHAR(255) NOT NULL, action_type VARCHAR(32) NOT NULL, created_at VARCHAR(64) NOT NULL)",
     "CREATE TABLE IF NOT EXISTS crawl_runs (id VARCHAR(255) PRIMARY KEY, payload TEXT NOT NULL)",
 )
+INGESTION_ADVISORY_LOCK_ID = 5_344_947_834_709
 
 
 def normalize_database_url(database_url: str) -> str:
@@ -109,6 +112,18 @@ class RelationalStore(InMemoryStore):
     def _json(value) -> str:
         return json.dumps(model_to_dict(value), ensure_ascii=False)
 
+    @classmethod
+    def _upsert_documents(cls, connection, table: str, items: list) -> None:
+        if not items:
+            return
+        connection.execute(
+            text(
+                f"INSERT INTO {table}(id, payload) VALUES(:id, :payload) "
+                "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload"
+            ),
+            [{"id": item.id, "payload": cls._json(item)} for item in items],
+        )
+
     def _persist(self) -> None:
         with self._engine.begin() as connection:
             for table in ("sources", "articles", "events", "crawl_runs"):
@@ -132,6 +147,65 @@ class RelationalStore(InMemoryStore):
 
     def persist(self) -> None:
         self._persist()
+
+    def persist_ingestion_state(self) -> None:
+        """Upsert ingestion documents and atomically replace derived events."""
+
+        with self._engine.begin() as connection:
+            self._upsert_documents(connection, "sources", list(self.sources.values()))
+            self._upsert_documents(connection, "articles", list(self.articles.values()))
+            connection.execute(text("DELETE FROM events"))
+            self._upsert_documents(connection, "events", list(self.events.values()))
+
+    @contextmanager
+    def ingestion_guard(self) -> Iterator[None]:
+        if self._engine.dialect.name != "postgresql":
+            with super().ingestion_guard():
+                yield
+            return
+        with self._engine.connect() as connection:
+            acquired = bool(
+                connection.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_id)"),
+                    {"lock_id": INGESTION_ADVISORY_LOCK_ID},
+                ).scalar_one()
+            )
+            if not acquired:
+                raise IngestionBusyError("another news update is already running")
+            try:
+                yield
+            finally:
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(:lock_id)"),
+                    {"lock_id": INGESTION_ADVISORY_LOCK_ID},
+                )
+
+    def reload_for_ingestion(self) -> None:
+        self.reload()
+
+    def upsert_sources(self, sources: list[Source]) -> int:
+        with self._lock:
+            changed = [source for source in sources if self.sources.get(source.id) != source]
+            if not changed:
+                return 0
+            with self._engine.begin() as connection:
+                self._upsert_documents(connection, "sources", changed)
+            self.sources.update({source.id: source for source in changed})
+            return len(changed)
+
+    def add_run(self, run: CrawlRun) -> CrawlRun:
+        with self._lock:
+            with self._engine.begin() as connection:
+                self._upsert_documents(connection, "crawl_runs", [run])
+            self.runs[run.id] = run
+            return run
+
+    def _delete_source_content(self, source_ids: set[str] | frozenset[str], article_ids: set[str]) -> None:
+        with self._engine.begin() as connection:
+            for article_id in article_ids:
+                connection.execute(text("DELETE FROM articles WHERE id = :id"), {"id": article_id})
+            for source_id in source_ids:
+                connection.execute(text("DELETE FROM sources WHERE id = :id"), {"id": source_id})
 
     def seed(self, sources: list[Source], raw_articles: list[dict]) -> None:
         super().seed(sources, raw_articles)
@@ -220,7 +294,7 @@ def persistent_store(database_path: str | Path = "data/runtime/signalscope.db", 
         path = Path(database_path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         store = RelationalStore(f"sqlite:///{path.as_posix()}")
-    if not store.events:
+    if not store.events and database_url is None:
         seeded = demo_store()
         store.sources = seeded.sources
         store.articles = seeded.articles

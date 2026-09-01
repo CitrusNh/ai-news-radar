@@ -97,6 +97,13 @@ def test_fetch_feed_does_not_retry_http_policy_failure():
     assert len(calls) == 1
 
 
+def test_fetch_feed_retries_rate_limit_and_server_errors():
+    source = Source("s1", "来源", feed_url="https://example.com/feed.xml")
+    statuses = iter([503, 200])
+    result = fetch_feed(source, http_get=lambda _url, _timeout: (next(statuses), RSS), retries=1)
+    assert result.status == "success"
+
+
 def test_fetch_feed_uses_html_parser_for_html_sources():
     source = Source("s1", "来源", feed_url="https://example.com/latest", fetch_mode="html")
     result = fetch_feed(source, http_get=lambda _url, _timeout: (200, HTML))

@@ -1,9 +1,12 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from backend.app.ingestion import FeedFetchResult
-from backend.app.models import Source
-from backend.app.store import InMemoryStore
-from backend.app.workflow import IngestionWorkflow
+from backend.app.models import CrawlRun, Source
+from backend.app.source_catalog import DEMO_SOURCE_IDS
+from backend.app.store import IngestionBusyError, InMemoryStore, demo_store
+from backend.app.workflow import IngestionCooldownError, IngestionWorkflow, run_public_news_update
 
 
 def test_workflow_ingests_successful_sources_and_isolates_failures():
@@ -50,3 +53,57 @@ def test_incremental_workflow_preserves_existing_event_ids():
     IngestionWorkflow(store, lambda current: FeedFetchResult(current.id, "success", [first_item, second_item])).run()
     assert original_event_id in store.events
     assert len(store.events[original_event_id].article_ids) == 2
+
+
+def test_workflow_ignores_articles_older_than_the_hot_news_window():
+    store = InMemoryStore()
+    source = Source("old", "旧来源", feed_url="https://example.com/feed")
+    store.sources[source.id] = source
+    old_item = {
+        "source_id": source.id,
+        "url": "https://example.com/old",
+        "title": "已经过期的旧新闻",
+        "summary": "摘要",
+        "channel": "AI",
+        "published_at": datetime(2020, 1, 1, tzinfo=timezone.utc),
+        "entities": [],
+    }
+    run = IngestionWorkflow(store, lambda current: FeedFetchResult(current.id, "success", [old_item])).run()
+    assert run.status == "completed"
+    assert run.article_count == 0
+    assert store.events == {}
+
+
+def test_workflow_rejects_concurrent_and_recent_manual_updates():
+    store = InMemoryStore()
+    with store.ingestion_guard():
+        with pytest.raises(IngestionBusyError):
+            IngestionWorkflow(store).run()
+
+    store.add_run(CrawlRun("recent", datetime.now(timezone.utc), status="completed"))
+    with pytest.raises(IngestionCooldownError) as error:
+        IngestionWorkflow(store).run(cooldown_seconds=900)
+    assert 895 <= error.value.retry_after_seconds <= 900
+
+
+def test_public_update_populates_every_domain_and_retires_demo_content():
+    store = demo_store()
+
+    def fetcher(source):
+        item = {
+            "source_id": source.id,
+            "url": f"https://example.com/{source.id}",
+            "title": f"{source.domain} category real public headline",
+            "summary": f"{source.name} public summary",
+            "channel": source.default_channel,
+            "published_at": datetime.now(timezone.utc),
+            "entities": [],
+        }
+        return FeedFetchResult(source.id, "success", [item])
+
+    run = run_public_news_update(store, fetcher=fetcher)
+    assert run.status == "completed"
+    assert run.article_count >= 18
+    assert {event.domain for event in store.events.values()} == {"AI", "科技", "财经", "娱乐", "体育", "游戏"}
+    assert not (DEMO_SOURCE_IDS & store.sources.keys())
+    assert all(article.source_id not in DEMO_SOURCE_IDS for article in store.articles.values())

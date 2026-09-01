@@ -3,6 +3,24 @@ from __future__ import annotations
 from .models import Source
 
 
+DEMO_SOURCE_IDS = frozenset(
+    {
+        "openai",
+        "deepmind",
+        "mit-tech-review",
+        "huggingface",
+        "microsoft-ai",
+        "the-information",
+        "bloomberg",
+        "stanford-hai",
+        "techcrunch",
+        "anthropic",
+        "aws-ml",
+        "meta-ai",
+    }
+)
+
+
 PUBLIC_SOURCE_CATALOG = (
     Source("google-news-ai", "Google 新闻·AI", domain="AI", source_type="aggregator", trust_tier=2, feed_url="https://news.google.com/rss/search?q=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%20OR%20AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", robots_status="allowed", compliance_status="approved", default_channel="AI 热点"),
     Source("openai-news", "OpenAI News", domain="AI", trust_tier=3, feed_url="https://openai.com/news/rss.xml", robots_status="allowed", compliance_status="approved", default_channel="模型与产品"),
@@ -40,7 +58,7 @@ PUBLIC_SOURCE_CATALOG = (
     Source("google-news-sports", "Google 新闻·体育", domain="体育", source_type="aggregator", trust_tier=2, feed_url="https://news.google.com/rss/search?q=%E4%BD%93%E8%82%B2%20OR%20%E8%B6%B3%E7%90%83%20OR%20%E7%AF%AE%E7%90%83&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", robots_status="allowed", compliance_status="approved", default_channel="体育热点"),
     Source("eurogamer", "Eurogamer", domain="游戏", trust_tier=2, feed_url="https://www.eurogamer.net/?format=rss", robots_status="allowed", compliance_status="approved", default_channel="游戏资讯"),
     Source("gamespot", "GameSpot", domain="游戏", trust_tier=2, feed_url="https://www.gamespot.com/feeds/mashup/", robots_status="allowed", compliance_status="approved", default_channel="游戏资讯"),
-    Source("pc-gamer", "PC Gamer", domain="游戏", trust_tier=2, feed_url="https://www.pcgamer.com/rss/", robots_status="allowed", compliance_status="approved", default_channel="PC 游戏"),
+    Source("pc-gamer", "PC Gamer", domain="游戏", trust_tier=2, feed_url="https://www.pcgamer.com/news/", robots_status="allowed", compliance_status="approved", fetch_mode="html", default_channel="PC 游戏"),
     Source("google-news-games", "Google 新闻·游戏", domain="游戏", source_type="aggregator", trust_tier=2, feed_url="https://news.google.com/rss/search?q=%E6%B8%B8%E6%88%8F%20OR%20%E7%94%B5%E7%AB%9E&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", robots_status="allowed", compliance_status="approved", default_channel="游戏热点"),
 )
 
@@ -48,12 +66,4 @@ PUBLIC_SOURCE_CATALOG = (
 def ensure_public_sources(store) -> int:
     """Insert or refresh the built-in multi-domain public source registry."""
 
-    changed = 0
-    for source in PUBLIC_SOURCE_CATALOG:
-        current = store.sources.get(source.id)
-        if current != source:
-            store.sources[source.id] = source
-            changed += 1
-    if changed:
-        store.persist()
-    return changed
+    return store.upsert_sources(list(PUBLIC_SOURCE_CATALOG))

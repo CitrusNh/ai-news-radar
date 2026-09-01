@@ -7,12 +7,15 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable, Iterable
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
 from bs4 import BeautifulSoup
+import httpx
 
 from .models import Source
+
+
+MAX_ARTICLES_PER_SOURCE = 30
 
 
 @dataclass(slots=True)
@@ -98,7 +101,7 @@ def parse_feed(xml_payload: str, source: Source) -> list[dict]:
             link = next((item for item in links if item), "")
             if title and link:
                 articles.append({"source_id": source.id, "url": link, "title": title, "summary": summary, "channel": source.default_channel, "published_at": _parse_datetime(published), "entities": []})
-    return articles
+    return articles[:MAX_ARTICLES_PER_SOURCE]
 
 
 def parse_public_page(html_payload: str, source: Source, base_url: str | None = None) -> list[dict]:
@@ -149,12 +152,12 @@ def parse_public_page(html_payload: str, source: Source, base_url: str | None = 
                 "entities": [],
             }
         )
-        if len(articles) >= 30:
+        if len(articles) >= MAX_ARTICLES_PER_SOURCE:
             break
     return articles
 
 
-def fetch_feed(source: Source, http_get: Callable[[str, float], tuple[int, str]] | None = None, timeout_seconds: float = 8.0, retries: int = 2, throttle_seconds: float = 0.0) -> FeedFetchResult:
+def fetch_feed(source: Source, http_get: Callable[[str, float], tuple[int, str]] | None = None, timeout_seconds: float = 6.0, retries: int = 1, throttle_seconds: float = 0.0) -> FeedFetchResult:
     """Fetch a public RSS/Atom feed or HTML listing with bounded retries."""
 
     feed_url = validate_feed_url(getattr(source, "feed_url", ""))
@@ -166,6 +169,9 @@ def fetch_feed(source: Source, http_get: Callable[[str, float], tuple[int, str]]
         try:
             status, body = request(feed_url, timeout_seconds)
             if status < 200 or status >= 300:
+                if status in {429, 500, 502, 503, 504} and attempt < retries:
+                    time.sleep(0.1 * (2**attempt))
+                    continue
                 return FeedFetchResult(source.id, "failed", [], f"source returned HTTP {status}", status)
             parser = parse_public_page if getattr(source, "fetch_mode", "rss") == "html" or source.source_type in {"html", "webpage", "site"} else parse_feed
             articles = parser(body, source, feed_url) if parser is parse_public_page else parser(body, source)
@@ -178,10 +184,25 @@ def fetch_feed(source: Source, http_get: Callable[[str, float], tuple[int, str]]
 
 
 def _default_http_get(url: str, timeout: float) -> tuple[int, str]:
-    request = Request(url, headers={"User-Agent": "SignalScopeAI/0.1 (+public-news-radar)"})
-    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL is managed by an allow-listed source registry.
-        payload = response.read(2_000_000)
-        return int(response.status), payload.decode("utf-8", errors="replace")
+    limits = httpx.Limits(max_connections=8, max_keepalive_connections=4)
+    request_timeout = httpx.Timeout(timeout, connect=min(timeout, 4.0), pool=min(timeout, 4.0))
+    try:
+        with httpx.Client(
+            headers={"User-Agent": "SignalScopeAI/0.2 (+https://github.com/CitrusNh/ai-news-radar)"},
+            follow_redirects=True,
+            limits=limits,
+            timeout=request_timeout,
+        ) as client:
+            with client.stream("GET", url) as response:
+                payload = bytearray()
+                for chunk in response.iter_bytes():
+                    payload.extend(chunk)
+                    if len(payload) >= 2_000_000:
+                        break
+                encoding = response.encoding or "utf-8"
+                return response.status_code, bytes(payload[:2_000_000]).decode(encoding, errors="replace")
+    except httpx.HTTPError as exc:
+        raise OSError(str(exc)) from exc
 
 
 def source_is_fetchable(source: Source) -> bool:
