@@ -44,7 +44,7 @@
             <span class="meta-divider"></span>
             <span>过去 24 小时更新</span>
             <span class="meta-divider"></span>
-            <span class="fresh"><span class="fresh-dot"></span> 数据新鲜</span>
+            <span class="fresh"><span class="fresh-dot"></span> <span id="dataStatus">正在连接后端</span></span>
           </div>
         </div>
         <div class="hero-signal">
@@ -112,7 +112,7 @@
             </div>
             <p class="briefing-lede">AI 行业今天的脉搏，集中在<span class="highlight">效率与落地</span>。</p>
             <div class="briefing-stat"><span>最热主题</span><strong>AI Agent</strong><span class="stat-change">↑ 32%</span></div>
-            <div class="briefing-stat"><span>活跃来源</span><strong>18 个</strong><span class="stat-change neutral">+3 今日</span></div>
+            <div class="briefing-stat"><span>活跃来源</span><strong id="activeSourceCount">—</strong><span class="stat-change neutral" id="storageStatus">连接中</span></div>
             <div class="briefing-stat"><span>平均新鲜度</span><strong>91<span class="unit">/100</span></strong><span class="stat-change">↑ 6%</span></div>
             <div class="briefing-footer"><span class="pulse-line"></span><span>过去 24 小时 · 自动更新</span></div>
           </section>
@@ -130,7 +130,7 @@
           <section class="side-card sources-card">
             <div class="side-card-head"><div><span class="section-kicker">SOURCE PULSE</span><h3>来源脉搏</h3></div><span class="source-status"><span></span> 正常</span></div>
             <div class="source-visual"><div class="bar bar-1"></div><div class="bar bar-2"></div><div class="bar bar-3"></div><div class="bar bar-4"></div><div class="bar bar-5"></div><div class="bar bar-6"></div><div class="bar bar-7"></div><div class="bar bar-8"></div><div class="bar bar-9"></div><div class="bar bar-10"></div><div class="bar bar-11"></div><div class="bar bar-12"></div></div>
-            <div class="source-footer"><span>过去 12 小时</span><strong>86 <small>条新信号</small></strong></div>
+            <div class="source-footer"><span id="schedulerStatus">调度状态读取中</span><strong><span id="sourceArticleCount">—</span> <small>条来源记录</small></strong></div>
           </section>
         </aside>
       </section>

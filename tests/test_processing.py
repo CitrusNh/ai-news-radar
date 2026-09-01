@@ -103,3 +103,13 @@ def test_rank_events_applies_domain_channel_keyword_and_muted_source_preferences
     assert ranked[0].title == "推理模型发布"
     preference.muted_sources = [source.id]
     assert rank_events(events, articles, preference) == []
+
+
+def test_listing_with_domain_filter_does_not_overwrite_saved_domains():
+    from backend.app.store import demo_store
+
+    store = demo_store()
+    preference = store.get_preference("domain-user")
+    preference.domains = ["科技"]
+    store.list_events("domain-user", domain="AI")
+    assert store.get_preference("domain-user").domains == ["科技"]

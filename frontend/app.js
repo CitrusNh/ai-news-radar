@@ -33,7 +33,8 @@ const SUBCHANNELS = {
 };
 const API_BASE = window.SIGNALSCOPE_API_BASE || "http://127.0.0.1:8000/api/v1";
 let usingApi = false;
-const state = { domain: "AI", channel: "全部", search: "", sort: "heat", saved: new Set(JSON.parse(localStorage.getItem("signal-saved") || "[]")), read: new Set(JSON.parse(localStorage.getItem("signal-read") || "[]")), muted: new Set(JSON.parse(localStorage.getItem("signal-muted") || "[]")), keywords: new Set(JSON.parse(localStorage.getItem("signal-keywords") || '["AI Agent"]')), sourceMutes: new Set(JSON.parse(localStorage.getItem("signal-source-mutes") || "[]")) };
+const storedSet = (key, fallback = "[]") => new Set(JSON.parse(localStorage.getItem(key) || fallback).map(String));
+const state = { domain: "AI", channel: "全部", search: "", sort: "heat", saved: storedSet("signal-saved"), read: storedSet("signal-read"), muted: storedSet("signal-muted"), keywords: storedSet("signal-keywords", '["AI Agent"]'), sourceMutes: storedSet("signal-source-mutes") };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -80,6 +81,35 @@ async function loadNewsFromApi() {
   }
 }
 
+async function loadBackendState() {
+  try {
+    const headers = { "X-Anonymous-User": getAnonymousUserId() };
+    const [healthResponse, sourceResponse, savedResponse, readResponse] = await Promise.all([
+      fetch(`${API_BASE}/health`),
+      fetch(`${API_BASE}/admin/source-health`),
+      fetch(`${API_BASE}/library?type=saved`, { headers }),
+      fetch(`${API_BASE}/library?type=read`, { headers })
+    ]);
+    if (![healthResponse, sourceResponse, savedResponse, readResponse].every(response => response.ok)) throw new Error("backend state unavailable");
+    const health = await healthResponse.json();
+    const sources = await sourceResponse.json();
+    state.saved = new Set((await savedResponse.json()).map(event => String(event.id)));
+    state.read = new Set((await readResponse.json()).map(event => String(event.id)));
+    saveState();
+    $("#dataStatus").textContent = "后端数据已连接";
+    $("#activeSourceCount").textContent = `${sources.filter(source => source.active).length} 个`;
+    $("#storageStatus").textContent = health.storage || "已连接";
+    $("#sourceArticleCount").textContent = sources.reduce((total, source) => total + source.article_count, 0);
+    $("#schedulerStatus").textContent = health.scheduler?.enabled ? `每 ${Math.round(health.scheduler.interval_seconds / 3600)} 小时自动更新` : "定时更新未启用";
+  } catch {
+    $("#dataStatus").textContent = "本地演示数据";
+    $("#activeSourceCount").textContent = "12 个";
+    $("#storageStatus").textContent = "离线模式";
+    $("#sourceArticleCount").textContent = FALLBACK_NEWS.length;
+    $("#schedulerStatus").textContent = "后端暂未连接";
+  }
+}
+
 function visibleNews(source = FALLBACK_NEWS) {
   if (state.domain !== "AI" && state.domain !== "全部") return [];
   let list = source.filter(item => !state.muted.has(item.id) && !state.sourceMutes.has(item.source));
@@ -92,7 +122,7 @@ function visibleNews(source = FALLBACK_NEWS) {
 }
 
 function cardTemplate(item) {
-  const saved = state.saved.has(item.id), read = state.read.has(item.id);
+  const key = String(item.id), saved = state.saved.has(key), read = state.read.has(key);
   return `<article class="news-card ${read ? "is-read" : ""}" data-id="${item.id}">
     <span class="card-accent ${item.color}"></span>
     <div class="card-content">
@@ -182,8 +212,8 @@ $("#keywordChips").addEventListener("click", event => { const chip = event.targe
 $$('[data-source]').forEach(chip => chip.addEventListener("click", () => chip.classList.toggle("active")));
 $$('.trend-item').forEach(item => item.addEventListener("click", async () => { $("#searchInput").value = item.dataset.query; state.search = item.dataset.query; await refreshNews(); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看：${item.dataset.query}`); }));
 $("#clearFilters").addEventListener("click", async () => { state.domain = "AI"; state.channel = "全部"; state.search = ""; $("#searchInput").value = ""; await refreshNews(); });
-$("#viewSaved").addEventListener("click", () => { const saved = (window.__signalNews || FALLBACK_NEWS).filter(item => state.saved.has(item.id)); if (!saved.length) { toast("还没有收藏，先收藏几条感兴趣的信号吧"); return; } $("#searchInput").value = ""; state.search = ""; $("#newsFeed").innerHTML = saved.map(cardTemplate).join(""); $$(".card-action").forEach(btn => btn.addEventListener("click", handleAction)); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看 ${saved.length} 条收藏`); });
-$("#resetLibrary").addEventListener("click", () => { state.saved.clear(); state.read.clear(); state.muted.clear(); state.sourceMutes.clear(); saveState(); render(); toast("本地记录已清空"); });
+$("#viewSaved").addEventListener("click", () => { const saved = (window.__signalNews || FALLBACK_NEWS).filter(item => state.saved.has(String(item.id))); if (!saved.length) { toast("还没有收藏，先收藏几条感兴趣的信号吧"); return; } $("#searchInput").value = ""; state.search = ""; $("#newsFeed").innerHTML = saved.map(cardTemplate).join(""); $$(".card-action").forEach(btn => btn.addEventListener("click", handleAction)); window.scrollTo({ top: 490, behavior: "smooth" }); toast(`正在查看 ${saved.length} 条收藏`); });
+$("#resetLibrary").addEventListener("click", async () => { const headers = { "Content-Type": "application/json", "X-Anonymous-User": getAnonymousUserId() }; if (usingApi) { await Promise.all([...state.saved].map(id => fetch(`${API_BASE}/events/${encodeURIComponent(id)}/actions`, { method: "POST", headers, body: JSON.stringify({ action_type: "unsaved" }) }).catch(() => null))); await Promise.all([...state.read].map(id => fetch(`${API_BASE}/events/${encodeURIComponent(id)}/actions`, { method: "POST", headers, body: JSON.stringify({ action_type: "unread" }) }).catch(() => null))); } state.saved.clear(); state.read.clear(); state.muted.clear(); state.sourceMutes.clear(); saveState(); render(); toast("收藏、已读和本地记录已清空"); });
 $("#profileButton").addEventListener("click", openFilter);
 $("#themeToggle").addEventListener("click", () => { document.body.classList.toggle("dark"); $("#themeToggle").textContent = document.body.classList.contains("dark") ? "☾" : "☼"; });
 $("#loadMore").addEventListener("click", () => toast(usingApi ? "已展示当前 API 返回的全部信号" : "这是 Demo 版本，更多信号将在接入数据源后持续更新"));
@@ -195,4 +225,4 @@ async function refreshNews() {
   render();
 }
 
-refreshNews();
+Promise.all([loadBackendState(), refreshNews()]).then(() => render());

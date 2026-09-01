@@ -7,7 +7,7 @@ APP = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
 
 def test_frontend_keeps_required_demo_surfaces():
-    for element_id in ["domainTabs", "channelTabs", "newsFeed", "searchInput", "sortSelect", "detailModal", "filterModal"]:
+    for element_id in ["domainTabs", "channelTabs", "newsFeed", "searchInput", "sortSelect", "detailModal", "filterModal", "dataStatus", "activeSourceCount", "schedulerStatus"]:
         assert f'id="{element_id}"' in INDEX
 
 
@@ -16,6 +16,7 @@ def test_frontend_uses_api_with_local_fallback():
     assert "loadNewsFromApi" in APP
     assert "FALLBACK_NEWS" in APP
     assert "apiNews || FALLBACK_NEWS" in APP
+    assert "loadBackendState" in APP
 
 
 def test_frontend_maps_api_event_fields_needed_by_cards():

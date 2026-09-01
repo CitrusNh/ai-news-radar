@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
@@ -86,9 +87,9 @@ class InMemoryStore:
             return preference
 
     def list_events(self, anonymous_user_id: str, domain: str | None = None, channel: str | None = None, keyword: str | None = None, sort: str = "heat") -> list[Event]:
-        preference = self.get_preference(anonymous_user_id)
-        if domain:
-            preference.domains = [domain]
+        saved_preference = self.get_preference(anonymous_user_id)
+        muted_ids = {source_id for source_id, source in self.sources.items() if source_id in saved_preference.muted_sources or source.name in saved_preference.muted_sources}
+        preference = replace(saved_preference, domains=[domain] if domain else list(saved_preference.domains), muted_sources=list(muted_ids))
         events = rank_events(self.events.values(), self.articles, preference, sort=sort)
         if channel and channel != "全部":
             events = [event for event in events if event.channel == channel]
