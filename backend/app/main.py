@@ -42,7 +42,9 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
 
     def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
         expected = os.getenv("SIGNALSCOPE_ADMIN_KEY", "")
-        if expected and x_admin_key != expected:
+        if not expected:
+            raise HTTPException(status_code=503, detail="admin API is disabled until SIGNALSCOPE_ADMIN_KEY is configured")
+        if x_admin_key != expected:
             raise HTTPException(status_code=401, detail="invalid admin key")
 
     def event_out(event, store: InMemoryStore) -> EventOut:

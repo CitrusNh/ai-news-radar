@@ -21,6 +21,7 @@ class Source:
     terms_url: str = ""
     robots_status: str = "unknown"
     default_channel: str = "未分类"
+    compliance_status: str = "pending"
 
 
 @dataclass(slots=True)

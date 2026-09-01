@@ -111,6 +111,7 @@ class SourceIn(BaseModel):
     terms_url: str = ""
     robots_status: Literal["unknown", "allowed", "blocked"] = "unknown"
     default_channel: str = "未分类"
+    compliance_status: Literal["pending", "approved", "rejected"] = "pending"
 
 
 class SourceDetailOut(SourceIn):

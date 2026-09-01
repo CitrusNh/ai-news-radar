@@ -14,6 +14,10 @@ def test_validate_feed_url_rejects_relative_and_accepts_https():
     assert validate_feed_url(" https://example.com/feed.xml ") == "https://example.com/feed.xml"
     with pytest.raises(ValueError):
         validate_feed_url("/feed.xml")
+    with pytest.raises(ValueError, match="local"):
+        validate_feed_url("http://localhost/feed.xml")
+    with pytest.raises(ValueError, match="private"):
+        validate_feed_url("http://127.0.0.1/feed.xml")
 
 
 def test_parse_rss_and_atom_to_raw_article_shape():
@@ -56,6 +60,7 @@ def test_fetch_feed_does_not_retry_http_policy_failure():
 
 
 def test_source_is_fetchable_requires_active_feed_and_nonblocked_robots():
-    assert source_is_fetchable(Source("s1", "来源", feed_url="https://example.com/feed", robots_status="allowed"))
-    assert not source_is_fetchable(Source("s2", "来源", feed_url="https://example.com/feed", robots_status="blocked"))
-    assert not source_is_fetchable(Source("s3", "来源", feed_url="", robots_status="allowed"))
+    assert source_is_fetchable(Source("s1", "来源", feed_url="https://example.com/feed", robots_status="allowed", compliance_status="approved"))
+    assert not source_is_fetchable(Source("s2", "来源", feed_url="https://example.com/feed", robots_status="blocked", compliance_status="approved"))
+    assert not source_is_fetchable(Source("s3", "来源", feed_url="", robots_status="allowed", compliance_status="approved"))
+    assert not source_is_fetchable(Source("s4", "来源", feed_url="https://example.com/feed", robots_status="allowed", compliance_status="pending"))

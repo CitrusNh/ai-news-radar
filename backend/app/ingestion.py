@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import ipaddress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -25,6 +26,15 @@ def validate_feed_url(feed_url: str) -> str:
     parsed = urlparse(feed_url.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("feed URL must be an absolute http(s) URL")
+    hostname = (parsed.hostname or "").lower()
+    if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(".local"):
+        raise ValueError("feed URL must not target a local host")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified):
+        raise ValueError("feed URL must not target a private or reserved address")
     return feed_url.strip()
 
 
@@ -108,4 +118,4 @@ def _default_http_get(url: str, timeout: float) -> tuple[int, str]:
 def source_is_fetchable(source: Source) -> bool:
     """Conservative gate for sources; an explicit policy block always wins."""
 
-    return bool(source.active and getattr(source, "feed_url", "") and getattr(source, "robots_status", "allowed") != "blocked")
+    return bool(source.active and getattr(source, "feed_url", "") and source.robots_status == "allowed" and source.compliance_status == "approved")

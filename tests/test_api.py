@@ -6,8 +6,12 @@ from backend.app.store import demo_store
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("SIGNALSCOPE_ADMIN_KEY", "test-admin-key")
     return TestClient(create_app(demo_store()))
+
+
+ADMIN_HEADERS = {"X-Admin-Key": "test-admin-key"}
 
 
 def test_health_and_domains(client):
@@ -62,6 +66,14 @@ def test_invalid_event_and_invalid_action_are_rejected(client):
 def test_source_health_and_demo_run(client):
     health = client.get("/api/v1/admin/source-health")
     assert health.status_code == 200 and len(health.json()) >= 5
-    run = client.post("/api/v1/admin/runs")
+    run = client.post("/api/v1/admin/runs", headers=ADMIN_HEADERS)
     assert run.status_code == 201 and run.json()["status"] == "completed"
-    assert client.get(f"/api/v1/admin/runs/{run.json()['run_id']}").json()["run_id"] == run.json()["run_id"]
+    assert client.get(f"/api/v1/admin/runs/{run.json()['run_id']}", headers=ADMIN_HEADERS).json()["run_id"] == run.json()["run_id"]
+
+
+def test_admin_source_registration_requires_key_and_explicit_approval(client):
+    payload = {"id": "approved-source", "name": "Approved Source", "feed_url": "https://example.com/feed.xml", "robots_status": "allowed", "compliance_status": "approved", "default_channel": "模型与产品"}
+    assert client.put("/api/v1/admin/sources/approved-source", json=payload).status_code == 401
+    created = client.put("/api/v1/admin/sources/approved-source", json=payload, headers=ADMIN_HEADERS)
+    assert created.status_code == 200
+    assert created.json()["compliance_status"] == "approved"
