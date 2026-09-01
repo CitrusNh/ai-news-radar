@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SignalScope AI｜热点摘要雷达</title>
+    <meta name="description" content="把分散的 AI 新闻，整理成值得关注的行业信号。" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="SignalScope AI 首页">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-copy">
+          <span class="brand-name">SignalScope <b>AI</b></span>
+          <span class="brand-tagline">AI 行业热点摘要雷达</span>
+        </span>
+      </a>
+      <nav class="topnav" aria-label="主导航">
+        <a class="nav-item active" href="#top">今日雷达</a>
+        <a class="nav-item" href="#library">我的收藏</a>
+        <a class="nav-item" href="#about">关于</a>
+      </nav>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="切换主题" title="切换主题">☼</button>
+        <button class="avatar" id="profileButton" aria-label="打开偏好设置">K</button>
+      </div>
+    </header>
+
+    <main id="top" class="page-shell">
+      <section class="hero-section">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="live-dot"></span> LIVE RADAR · 2026.09.01</div>
+          <h1>今天，什么值得<br /><em>被看见？</em></h1>
+          <p class="hero-subtitle">把分散的 AI 新闻，整理成值得关注的行业信号。</p>
+          <div class="hero-meta">
+            <span><strong id="visibleCount">12</strong> 个精选事件</span>
+            <span class="meta-divider"></span>
+            <span>过去 24 小时更新</span>
+            <span class="meta-divider"></span>
+            <span class="fresh"><span class="fresh-dot"></span> 数据新鲜</span>
+          </div>
+        </div>
+        <div class="hero-signal">
+          <div class="signal-orbit orbit-one"></div>
+          <div class="signal-orbit orbit-two"></div>
+          <div class="signal-orbit orbit-three"></div>
+          <div class="signal-core"><span>AI</span><small>RADAR</small></div>
+          <div class="orbit-label label-top">MODEL<br /><b>+24%</b></div>
+          <div class="orbit-label label-right">POLICY<br /><b>+18%</b></div>
+          <div class="orbit-label label-bottom">CAPITAL<br /><b>+11%</b></div>
+          <div class="orbit-label label-left">PRODUCT<br /><b>+32%</b></div>
+        </div>
+      </section>
+
+      <section class="control-strip" aria-label="主题、频道与搜索">
+        <div class="domain-row">
+          <span class="nav-label">主题</span>
+          <div class="domain-tabs" id="domainTabs"></div>
+          <span class="domain-note" id="domainNote">AI · 当前已接入</span>
+        </div>
+        <div class="subchannel-row">
+          <span class="nav-label">频道</span>
+          <div class="channel-tabs" id="channelTabs"></div>
+        </div>
+        <div class="control-actions">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="searchInput" type="search" placeholder="搜索事件、公司或关键词" />
+          </label>
+          <button class="filter-btn" id="filterButton"><span class="filter-icon">☷</span> 筛选 <i id="filterBadge">0</i></button>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <div class="feed-column">
+          <div class="feed-heading">
+            <div>
+              <span class="section-kicker">TOP SIGNALS</span>
+              <h2>今日值得关注</h2>
+            </div>
+            <div class="sort-control">
+              <span>排序</span>
+              <select id="sortSelect" aria-label="排序方式">
+                <option value="heat">综合热度</option>
+                <option value="fresh">最新发布</option>
+                <option value="relevance">与你相关</option>
+              </select>
+            </div>
+          </div>
+          <div id="newsFeed" class="news-feed"></div>
+          <div id="emptyState" class="empty-state hidden">
+            <div class="empty-icon">⌁</div>
+            <h3>暂时没有匹配的事件</h3>
+            <p>试试换一个频道或关键词。</p>
+            <button class="text-button" id="clearFilters">清除筛选</button>
+          </div>
+          <button class="load-more" id="loadMore">加载更多信号 <span>↓</span></button>
+        </div>
+
+        <aside class="side-column">
+          <section class="side-card briefing-card">
+            <div class="side-card-head">
+              <div><span class="section-kicker">DAILY BRIEFING</span><h3>今日简报</h3></div>
+              <span class="date-pill">01 SEP</span>
+            </div>
+            <p class="briefing-lede">AI 行业今天的脉搏，集中在<span class="highlight">效率与落地</span>。</p>
+            <div class="briefing-stat"><span>最热主题</span><strong>AI Agent</strong><span class="stat-change">↑ 32%</span></div>
+            <div class="briefing-stat"><span>活跃来源</span><strong>18 个</strong><span class="stat-change neutral">+3 今日</span></div>
+            <div class="briefing-stat"><span>平均新鲜度</span><strong>91<span class="unit">/100</span></strong><span class="stat-change">↑ 6%</span></div>
+            <div class="briefing-footer"><span class="pulse-line"></span><span>过去 24 小时 · 自动更新</span></div>
+          </section>
+
+          <section class="side-card topics-card">
+            <div class="side-card-head"><div><span class="section-kicker">TRENDING NOW</span><h3>正在升温</h3></div><button class="more-btn" aria-label="查看更多趋势">···</button></div>
+            <div class="trend-list">
+              <button class="trend-item" data-query="AI Agent"><span class="trend-rank">01</span><span class="trend-name">AI Agent</span><span class="trend-score">+32%</span></button>
+              <button class="trend-item" data-query="推理模型"><span class="trend-rank">02</span><span class="trend-name">推理模型</span><span class="trend-score">+24%</span></button>
+              <button class="trend-item" data-query="企业采购"><span class="trend-rank">03</span><span class="trend-name">企业采购</span><span class="trend-score">+18%</span></button>
+              <button class="trend-item" data-query="AI 安全"><span class="trend-rank">04</span><span class="trend-name">AI 安全</span><span class="trend-score">+11%</span></button>
+            </div>
+          </section>
+
+          <section class="side-card sources-card">
+            <div class="side-card-head"><div><span class="section-kicker">SOURCE PULSE</span><h3>来源脉搏</h3></div><span class="source-status"><span></span> 正常</span></div>
+            <div class="source-visual"><div class="bar bar-1"></div><div class="bar bar-2"></div><div class="bar bar-3"></div><div class="bar bar-4"></div><div class="bar bar-5"></div><div class="bar bar-6"></div><div class="bar bar-7"></div><div class="bar bar-8"></div><div class="bar bar-9"></div><div class="bar bar-10"></div><div class="bar bar-11"></div><div class="bar bar-12"></div></div>
+            <div class="source-footer"><span>过去 12 小时</span><strong>86 <small>条新信号</small></strong></div>
+          </section>
+        </aside>
+      </section>
+
+      <section id="library" class="library-section">
+        <div class="library-intro"><span class="section-kicker">YOUR LIBRARY</span><h2>收藏与阅读轨迹</h2><p>把重要的信号留在这里，随时回来继续研究。</p></div>
+        <div class="library-stats"><div><strong id="savedCount">0</strong><span>已收藏</span></div><div><strong id="readCount">0</strong><span>已读事件</span></div><div><strong id="mutedCount">0</strong><span>已屏蔽</span></div></div>
+        <div class="library-actions"><button class="outline-btn" id="viewSaved">查看我的收藏 <span>→</span></button><button class="text-button" id="resetLibrary">清空本地记录</button></div>
+      </section>
+    </main>
+
+    <footer id="about" class="footer"><div class="footer-brand"><span class="brand-mark small"><span></span><span></span><span></span></span><span>SignalScope AI</span></div><p>Public beta · AI 生成摘要，仅供信息整理，请通过原文核实。</p><div class="footer-links"><a href="#about">来源说明</a><a href="#about">隐私</a><a href="#about">反馈</a></div></footer>
+
+    <div class="modal-backdrop hidden" id="detailModal" role="dialog" aria-modal="true" aria-label="事件详情">
+      <article class="detail-modal">
+        <button class="modal-close" id="modalClose" aria-label="关闭">×</button>
+        <div id="modalBody"></div>
+      </article>
+    </div>
+
+    <div class="modal-backdrop hidden" id="filterModal" role="dialog" aria-modal="true" aria-label="筛选设置">
+      <article class="filter-modal">
+        <button class="modal-close" id="filterClose" aria-label="关闭">×</button>
+        <span class="section-kicker">PERSONAL RADAR</span><h3>调整你的雷达</h3><p>选择你想优先看到的主题，偏好仅保存在当前浏览器。</p>
+        <div class="filter-group"><span class="filter-label">关注关键词</span><div class="chip-list" id="keywordChips"><button class="pref-chip active" data-keyword="AI Agent">AI Agent</button><button class="pref-chip" data-keyword="多模态">多模态</button><button class="pref-chip" data-keyword="企业采购">企业采购</button><button class="pref-chip" data-keyword="AI 安全">AI 安全</button><button class="pref-chip" data-keyword="推理模型">推理模型</button></div></div>
+        <div class="filter-group"><span class="filter-label">隐藏来源</span><div class="chip-list"><button class="pref-chip" data-source="TechCrunch">TechCrunch</button><button class="pref-chip" data-source="OpenAI">OpenAI</button><button class="pref-chip" data-source="MIT Technology Review">MIT Technology Review</button></div></div>
+        <button class="primary-btn" id="applyFilters">保存偏好 <span>→</span></button>
+      </article>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
