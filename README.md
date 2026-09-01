@@ -42,6 +42,16 @@ Streamlit Community Cloud
 
 当前公网方案是 Streamlit Community Cloud，不使用 Render。
 
+### 公网验收结果（2026-09-01）
+
+- 公网 HTTPS 首页、AI 热点列表、详情与来源链接正常；
+- 科技、财经、娱乐、体育、游戏分类入口与暂无数据状态正常；
+- 关键词搜索、无结果状态、收藏列表和已读列表正常；
+- 收藏与已读已实际写入 Neon PostgreSQL，并在重新打开同一访客链接后保持；
+- 390 × 844 手机视口和 1440 × 900 电脑视口均无横向溢出；
+- Streamlit 公网日志未发现 Traceback 或应用异常；浏览器仅观察到托管平台统计请求失败，不影响业务功能；
+- 本地 `46 passed`，后端覆盖率 `94.70%`；[GitHub Actions CI](https://github.com/CitrusNh/ai-news-radar/actions/runs/33477217379) 通过。
+
 在 [Streamlit Community Cloud](https://share.streamlit.io/) 创建应用，填写：
 
 | 字段 | 内容 |
@@ -162,6 +172,8 @@ pytest -q
 ```
 
 测试命令会执行后端单元测试、API 集成测试、Streamlit 服务层测试和部署契约测试，并要求后端代码覆盖率不低于 80%。
+
+最近一次完整验证结果：`46 passed`，后端代码覆盖率 `94.70%`，GitHub Actions CI 通过。
 
 ```powershell
 node --check frontend/app.js

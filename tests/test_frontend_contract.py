@@ -30,6 +30,19 @@ def test_readme_documents_persistence_safety_and_admin_workflow():
         assert phrase in readme
 
 
+def test_readme_records_the_verified_public_release():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for phrase in [
+        "https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/",
+        "公网验收结果",
+        "46 passed",
+        "94.70%",
+        "GitHub Actions CI",
+        "API 文档仅供本地访问",
+    ]:
+        assert phrase in readme
+
+
 def test_ci_runs_tests_frontend_check_and_container_build():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "pytest -q" in workflow
