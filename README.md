@@ -1,58 +1,64 @@
-# SignalScope AI｜AI 热点摘要雷达
+# SignalScope｜多领域热点摘要雷达
 
-面向公众的 AI 行业热点摘要网站。公网版本使用 Streamlit Community Cloud 托管，通过 Neon PostgreSQL 持久保存新闻事件、来源、更新记录、匿名收藏和已读状态。
+面向公众的热点新闻聚合网站。系统通过 RSS/Atom 和公开新闻列表页采集最近 7 天内容，完成 URL 去重、事件聚类、热度排序和文字摘要，并将新闻、更新记录、匿名收藏与已读状态持久化到 Neon PostgreSQL。
 
 - GitHub：[https://github.com/CitrusNh/ai-news-radar](https://github.com/CitrusNh/ai-news-radar)
-- Streamlit 公网 Demo：https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/
+- Streamlit 公网 Demo：[https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/](https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/)
 
 ## 产品功能
 
-- 首页热点新闻列表与文字摘要；
-- AI、科技、财经、娱乐、体育、游戏主题入口；
-- 关键词搜索与热度、时间、相关性排序；
-- 新闻详情、关键事实、关注原因与来源原文；
-- 匿名收藏和已读状态；
-- Neon PostgreSQL 连接状态、数据更新时间和手动重新读取；
-- 加载中、无匹配结果、待接入分类和数据库错误状态；
-- RSS 2.0 与 Atom 解析；
-- 来源必须显式通过 robots 和合规审核后才能进入自动任务；
-- 拒绝 localhost、内网和保留 IP 地址，降低 SSRF 风险；
-- 单来源失败隔离、有限重试、URL 去重、事件聚类和热点评分；
-- 可配置但默认关闭的数据更新任务。
+- AI、科技、财经、娱乐、体育、游戏六个分类；
+- 首页热点列表、关键词搜索、热度/时间/相关性排序；
+- 新闻详情、文字摘要、关键事实、关注原因和来源原文；
+- 匿名收藏与已读状态；
+- 每天北京时间 08:00、22:00 自动更新；
+- 页面手动更新，带跨进程互斥和 15 分钟冷却；
+- 更新中、空结果、部分来源失败和数据库错误状态；
+- 24 个内置来源，单来源失败不会阻断其他来源；
+- 每个来源最多读取 30 条，只入库最近 7 天新闻，页面展示排序后的前 60 条；
+- Neon PostgreSQL 持久保存全部服务端数据，不使用 Streamlit 临时 SQLite。
 
 ## 技术架构
 
 ```text
-普通用户浏览器
-      │ HTTPS
-      ▼
-Streamlit Community Cloud
-      │
-      ├─ streamlit_app.py：页面、筛选、搜索、详情与交互
-      ├─ backend/app：获取、清洗、去重、聚类、评分与用户行为
-      └─ DATABASE_URL
-             ▼
-       Neon PostgreSQL
-       持久保存来源、文章、事件、任务、偏好、收藏和已读
+GitHub Actions（08:00 / 22:00，北京时间）
+                    │
+公开 RSS / Atom / HTML 新闻列表页
+                    │
+                    ▼
+  抓取超时与重试 → 清洗 → URL 去重 → 事件聚类 → 热度与摘要
+                    │
+                    ▼
+             Neon PostgreSQL
+                    ▲
+                    │
+普通用户 ──HTTPS── Streamlit Community Cloud
+                    │
+                    └─ 分类、搜索、详情、收藏、已读、手动更新
 ```
 
-仓库中的 `frontend/` 与 FastAPI 服务继续用于本地完整网站和 API 开发；Docker/Compose 保留为自托管备用方案，不是当前公网发布方式。
+采集使用 `httpx` 显式连接/读取超时，RSS/Atom 使用结构化 XML 解析，网页列表使用可配置 CSS 选择器和 BeautifulSoup。PostgreSQL advisory lock 防止 GitHub 定时任务与页面手动更新同时写入；来源和抓取任务使用增量 upsert，用户行为始终增量追加。
 
-## 部署为所有人可访问的网站
+仓库中的 `frontend/` 与 FastAPI 服务用于本地完整网站和 API 开发；Docker/Compose 保留为自托管备用方案，不是当前公网发布方式。公网 FastAPI Swagger 不对外提供，API 文档仅在本地访问：`http://127.0.0.1:8000/docs`。
 
-当前公网方案是 Streamlit Community Cloud，不使用 Render。
+## 数据来源
 
-### 公网验收结果（2026-09-01）
+内置来源覆盖 Google 新闻中文主题 RSS、OpenAI News、Google AI Blog、Microsoft AI Blog、MIT Technology Review、BBC、The Guardian、Hacker News、CoinDesk、ESPN、Eurogamer、GameSpot、PC Gamer 等。Hacker News 与 PC Gamer 使用公开 HTML 列表页，其余优先使用 RSS/Atom。
 
-- 公网 HTTPS 首页、AI 热点列表、详情与来源链接正常；
-- 科技、财经、娱乐、体育、游戏分类入口与暂无数据状态正常；
-- 关键词搜索、无结果状态、收藏列表和已读列表正常；
-- 收藏与已读已实际写入 Neon PostgreSQL，并在重新打开同一访客链接后保持；
-- 390 × 844 手机视口和 1440 × 900 电脑视口均无横向溢出；
-- Streamlit 公网日志未发现 Traceback 或应用异常；浏览器仅观察到托管平台统计请求失败，不影响业务功能；
-- 本地 `47 passed`，后端覆盖率 `94.70%`；[GitHub Actions CI](https://github.com/CitrusNh/ai-news-radar/actions/runs/33478063787) 通过。
+抓取器只读取无需登录即可访问的新闻列表和摘要，不实现登录绕过、验证码绕过或付费墙绕过。来源目录位于 `backend/app/source_catalog.py`，可继续增加 `rss` 或带 CSS 选择器的 `html` 来源。
 
-在 [Streamlit Community Cloud](https://share.streamlit.io/) 创建应用，填写：
+实现时参考了以下开源项目的模块化来源、定时采集和失败隔离思路，没有复制其代码：
+
+- [Ilias1988/Universal-News-Scraper](https://github.com/Ilias1988/Universal-News-Scraper)（MIT）；
+- [unsolublesugar/daily-tech-news](https://github.com/unsolublesugar/daily-tech-news)（MIT）；
+- [RoseSecurity/CloudPulse](https://github.com/RoseSecurity/CloudPulse)（Apache-2.0）；
+- [jaesivsm/JARR](https://github.com/jaesivsm/JARR)（AGPL-3.0，仅作架构参考）。
+
+## 公网部署
+
+当前方案是 Streamlit Community Cloud + Neon PostgreSQL + GitHub Actions，不使用 Render。
+
+在 [Streamlit Community Cloud](https://share.streamlit.io/) 创建应用：
 
 | 字段 | 内容 |
 |---|---|
@@ -60,124 +66,60 @@ Streamlit Community Cloud
 | Branch | `main` |
 | Main file path | `streamlit_app.py` |
 
-在应用的 **Advanced settings → Secrets** 中加入：
+在 Streamlit 的 **App settings → Secrets** 中配置：
 
 ```toml
-DATABASE_URL = "从 Neon Connect 对话框复制的 PostgreSQL 连接串"
+DATABASE_URL = "从 Neon Connect 对话框复制的 pooled PostgreSQL 连接串"
 ```
 
-不要把真实连接串写进代码、GitHub、Issue 或聊天。建议使用 Neon 的 pooled connection string，并保留 `sslmode=require`。应用启动时会严格检查 `DATABASE_URL`：缺失或不是 PostgreSQL 时会显示配置错误并停止，不会回退到 Streamlit 临时文件系统中的 SQLite。
+自动更新还需要在 GitHub 仓库的 **Settings → Secrets and variables → Actions → New repository secret** 中创建同名 `DATABASE_URL`。连接串只应由仓库所有者直接粘贴到平台 Secrets，不要写入代码、Issue、日志或聊天。
 
-### Streamlit Cloud 限制
+定时工作流位于 `.github/workflows/news-update.yml`，也可在 GitHub **Actions → News update → Run workflow** 手动触发。首次真实采集成功后，系统会移除原有 12 条 AI 演示新闻；新的 PostgreSQL 数据库不会自动写入演示数据。
 
-- 免费应用长时间无人访问时可能休眠，首次唤醒会稍慢；
-- Streamlit 进程可能重启，因此页面会话状态不是永久存储；收藏、已读和新闻数据通过 Neon PostgreSQL 持久化；
-- 当前匿名身份保存在页面 URL 的随机 `visitor` 参数中。同一链接可以延续收藏和已读状态；清除参数或换设备会生成新的匿名身份；
-- 当前真实来源必须先人工完成条款、robots 和接口许可审核；默认数据库只有演示数据；
-- Streamlit 公网入口不对外暴露 FastAPI Swagger。API 文档仅供本地访问：`http://127.0.0.1:8000/docs`；
-- 定时 RSS 更新默认关闭。Streamlit Community Cloud 不保证后台定时线程持续运行，生产级更新应使用独立调度任务或外部工作流。
+## 本地运行
 
-## PostgreSQL 配置
-
-公网需要持久化的服务端数据包括来源配置、原始文章、聚类事件、更新任务记录、匿名偏好、收藏和已读。正式 Streamlit 部署只接受 Neon PostgreSQL，不依赖临时 SQLite。
-
-本地如需模拟公网入口，可以临时设置 `DATABASE_URL` 后运行：
+Streamlit 页面：
 
 ```powershell
 pip install -r requirements.txt
+$env:DATABASE_URL="your-postgresql-connection-string"
 streamlit run streamlit_app.py
 ```
 
-真实连接串只应放在本地环境变量或 Streamlit Secrets，不应保存到 `.env.example` 以外的受版本控制文件。
-
-## 本地 FastAPI 网站与 API
+FastAPI 网站与本地 API：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
 pip install -r backend/requirements.txt
 uvicorn app.main:app --app-dir backend --reload
 ```
 
-打开 `http://127.0.0.1:8000` 查看本地网站；API 文档仅在本地通过 `http://127.0.0.1:8000/docs` 访问。
+打开 `http://127.0.0.1:8000`，API 文档位于 `http://127.0.0.1:8000/docs`。也可在 Windows 仓库根目录运行 `./start-demo.ps1`。
 
-也可以在 Windows 仓库根目录运行：
-
-```powershell
-.\start-demo.ps1
-```
-
-脚本只会启动一个网站服务，页面和 API 都在 `http://127.0.0.1:8000`。定时 RSS 任务默认关闭；只有在来源通过审核并设置环境变量后才建议启用：
+单次真实更新必须通过环境变量读取 PostgreSQL 连接串：
 
 ```powershell
-$env:SIGNALSCOPE_SCHEDULER_ENABLED="true"
-$env:SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS="14400"
+python -m scripts.update_news
 ```
 
-管理接口必须配置密钥：
-
-```powershell
-$env:SIGNALSCOPE_ADMIN_KEY="your-local-admin-key"
-```
-
-## Docker 自托管备用方案
-
-安装 Docker Desktop 后，在仓库根目录执行：
-
-```powershell
-$env:SIGNALSCOPE_ADMIN_KEY="replace-with-a-strong-key"
-docker compose up --build -d
-```
-
-随后打开 `http://127.0.0.1:8000`。页面、API 和 SQLite 数据库都在同一个容器应用中；数据库保存于 Docker 命名卷 `signalscope-data`，重启或升级容器不会丢失。
-
-停止网站：
-
-```powershell
-docker compose down
-```
-
-除非明确希望清空数据，不要执行 `docker compose down -v`。
-
-CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测试、Streamlit 入口编译、前端语法检查和备用 Docker 镜像构建。
-
-本地 FastAPI 主要接口：
-
-- `GET /api/v1/events`：热点事件列表；
-- `GET /api/v1/events/{id}`：事件详情；
-- `GET/PUT /api/v1/preferences`：匿名用户偏好；
-- `POST /api/v1/events/{id}/actions`：收藏、已读等行为；
-- `GET /api/v1/library`：收藏库或阅读库；
-- `GET /api/v1/admin/source-health`：来源健康状态；
-- `PUT /api/v1/admin/sources/{id}`：注册或更新审核后的 RSS 来源；
-- `POST /api/v1/admin/runs`：运行一次增量获取；
-- `GET /api/v1/admin/runs/{id}`：查询运行结果。
-
-## 数据与合规边界
-
-当前默认数据库只包含用于展示逻辑的本地样例数据。项目不会自动抓取任意网页，也不会绕过登录、验证码或付费墙。真实接入时应先完成来源条款审计，将 `robots_status` 设为 `allowed`、`compliance_status` 设为 `approved`，再通过管理接口注册 RSS 地址。
-
-## 本地静态前端 Demo
-
-```powershell
-python -m http.server 4173 --directory frontend
-```
-
-打开 `http://127.0.0.1:4173/`。
-
-## 测试
+## 测试与验证
 
 ```powershell
 pytest -q
-```
-
-测试命令会执行后端单元测试、API 集成测试、Streamlit 服务层测试和部署契约测试，并要求后端代码覆盖率不低于 80%。
-
-最近一次完整验证结果：`47 passed`，后端代码覆盖率 `94.70%`，GitHub Actions CI 通过。
-
-```powershell
+python -m py_compile streamlit_app.py scripts/update_news.py
 node --check frontend/app.js
-python -m py_compile streamlit_app.py
 ```
 
-MVP 使用本地样例数据和可替换的 AI 加工接口，不接入付费 API，也不抓取新闻网站。
+最近一次本地完整验证：`63 passed`，后端覆盖率 `92.71%`，Python 入口编译和前端 JavaScript 语法检查通过。
+
+2026-09-01 的无数据库真实网络试跑结果：24 个来源中 21 个成功，最近 7 天得到 512 条候选新闻，六个分类均有数据，整轮约 30 秒。3 个 AI 官方来源在本机出现 SSL 握手超时，被隔离并记录为部分失败，其余来源及任务正常完成。
+
+## 已知限制
+
+- GitHub Actions 免费定时任务可能因平台排队晚于 08:00 或 22:00 启动，不能承诺精确到分钟；
+- Streamlit 免费应用长时间无人访问会休眠，首次唤醒较慢；
+- 手动更新是同步操作，当前真实试跑约 30 秒，并设有 15 分钟冷却；
+- 少数海外来源可能受网络、TLS 或限流影响，失败会记录但不会中断其他来源；
+- 当前摘要是基于来源摘要的规则化整理，不是付费大模型生成，也不等同于事实核查；
+- 搜索是标题关键词匹配，尚未提供全文语义搜索；
+- 匿名身份保存在页面 URL 的 `visitor` 参数中，同一链接可延续收藏和已读，换链接或设备会生成新身份；
+- 公网仅提供 Streamlit 页面，FastAPI API 文档仍是本地访问。
