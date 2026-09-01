@@ -22,3 +22,9 @@ def test_frontend_uses_api_with_local_fallback():
 def test_frontend_maps_api_event_fields_needed_by_cards():
     for field in ["source_names", "source_urls", "global_heat_score", "personal_relevance", "key_facts", "why_it_matters"]:
         assert field in APP
+
+
+def test_readme_documents_persistence_safety_and_admin_workflow():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for phrase in ["SQLite 持久化", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs"]:
+        assert phrase in readme
