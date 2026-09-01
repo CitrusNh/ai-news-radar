@@ -72,3 +72,4 @@ def test_streamlit_is_the_public_contract_and_docker_is_a_backup():
     assert "load_public_store" in streamlit_app
     assert "streamlit" in requirements
     assert "DATABASE_URL" in (ROOT / ".streamlit" / "secrets.toml.example").read_text(encoding="utf-8")
+    assert "beautifulsoup4" in requirements

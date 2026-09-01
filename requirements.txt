@@ -1,2 +1,3 @@
 -r backend/requirements.txt
 streamlit>=1.40,<2
+beautifulsoup4>=4.12,<5
