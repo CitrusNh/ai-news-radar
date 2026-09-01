@@ -17,6 +17,9 @@ class Source:
     source_type: str = "official"
     trust_tier: int = 2
     active: bool = True
+    feed_url: str = ""
+    terms_url: str = ""
+    robots_status: str = "unknown"
 
 
 @dataclass(slots=True)
