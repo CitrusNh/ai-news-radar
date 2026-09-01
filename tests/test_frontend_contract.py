@@ -26,7 +26,7 @@ def test_frontend_maps_api_event_fields_needed_by_cards():
 
 def test_readme_documents_persistence_safety_and_admin_workflow():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for phrase in ["PostgreSQL", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs", "所有人可访问的网站"]:
+    for phrase in ["Streamlit Community Cloud", "PostgreSQL", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs", "所有人可访问的网站"]:
         assert phrase in readme
 
 
@@ -34,10 +34,11 @@ def test_ci_runs_tests_frontend_check_and_container_build():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "pytest -q" in workflow
     assert "node --check frontend/app.js" in workflow
+    assert "python -m py_compile streamlit_app.py" in workflow
     assert "docker/build-push-action@v6" in workflow
 
 
-def test_container_contract_serves_one_site_with_external_persistent_data():
+def test_streamlit_is_the_public_contract_and_docker_is_a_backup():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
     assert "USER signalscope" in dockerfile
@@ -45,9 +46,10 @@ def test_container_contract_serves_one_site_with_external_persistent_data():
     assert "--host 0.0.0.0" in dockerfile
     assert "8000:8000" in compose
     assert "signalscope-data:/app/data/runtime" in compose
-    render = (ROOT / "render.yaml").read_text(encoding="utf-8")
-    assert "healthCheckPath: /api/v1/health" in render
-    assert "key: DATABASE_URL" in render
-    assert "sync: false" in render
-    assert "mountPath: /app/data/runtime" not in render
-    assert "generateValue: true" in render
+    assert not (ROOT / "render.yaml").exists()
+    streamlit_app = (ROOT / "streamlit_app.py").read_text(encoding="utf-8")
+    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert "resolve_public_database_url" in streamlit_app
+    assert "load_public_store" in streamlit_app
+    assert "streamlit" in requirements
+    assert "DATABASE_URL" in (ROOT / ".streamlit" / "secrets.toml.example").read_text(encoding="utf-8")

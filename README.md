@@ -1,25 +1,86 @@
 # SignalScope AI｜AI 热点摘要雷达
 
-独立项目三：面向公众的 AI 行业热点摘要网站。
+面向公众的 AI 行业热点摘要网站。公网版本使用 Streamlit Community Cloud 托管，通过 Neon PostgreSQL 持久保存新闻事件、来源、更新记录、匿名收藏和已读状态。
 
-当前仓库包含：
+- GitHub：[https://github.com/CitrusNh/ai-news-radar](https://github.com/CitrusNh/ai-news-radar)
+- Streamlit 公网 Demo：首次在 Streamlit Community Cloud 部署成功后补充实际 HTTPS 地址
 
-- `frontend/`：与后端 API 联通的公共网站 Demo，后端不可用时自动回退本地样例；
-- `backend/`：SQLite/PostgreSQL 持久化、来源注册、RSS/Atom 获取、标准化、去重、事件聚类、热点评分、用户行为和 API 服务；
-- `tests/`：后端单元测试、接口测试和前端关键行为说明。
+## 产品功能
 
-## 当前已实现
-
-- 本地使用 SQLite，公网使用 PostgreSQL；服务重启或重新部署后事件、来源、任务、偏好、收藏和已读状态可以恢复；
+- 首页热点新闻列表与文字摘要；
+- AI、科技、财经、娱乐、体育、游戏主题入口；
+- 关键词搜索与热度、时间、相关性排序；
+- 新闻详情、关键事实、关注原因与来源原文；
+- 匿名收藏和已读状态；
+- Neon PostgreSQL 连接状态、数据更新时间和手动重新读取；
+- 加载中、无匹配结果、待接入分类和数据库错误状态；
 - RSS 2.0 与 Atom 解析；
 - 来源必须显式通过 robots 和合规审核后才能进入自动任务；
 - 拒绝 localhost、内网和保留 IP 地址，降低 SSRF 风险；
 - 单来源失败隔离、有限重试、URL 去重、事件聚类和热点评分；
-- 可配置但默认关闭的定时任务；
-- 管理来源、触发任务和查询任务状态的接口；
-- 前端显示真实后端存储、来源数量和调度状态。
+- 可配置但默认关闭的数据更新任务。
 
-## 本地启动（后端）
+## 技术架构
+
+```text
+普通用户浏览器
+      │ HTTPS
+      ▼
+Streamlit Community Cloud
+      │
+      ├─ streamlit_app.py：页面、筛选、搜索、详情与交互
+      ├─ backend/app：获取、清洗、去重、聚类、评分与用户行为
+      └─ DATABASE_URL
+             ▼
+       Neon PostgreSQL
+       持久保存来源、文章、事件、任务、偏好、收藏和已读
+```
+
+仓库中的 `frontend/` 与 FastAPI 服务继续用于本地完整网站和 API 开发；Docker/Compose 保留为自托管备用方案，不是当前公网发布方式。
+
+## 部署为所有人可访问的网站
+
+当前公网方案是 Streamlit Community Cloud，不使用 Render。
+
+在 [Streamlit Community Cloud](https://share.streamlit.io/) 创建应用，填写：
+
+| 字段 | 内容 |
+|---|---|
+| Repository | `CitrusNh/ai-news-radar` |
+| Branch | `main` |
+| Main file path | `streamlit_app.py` |
+
+在应用的 **Advanced settings → Secrets** 中加入：
+
+```toml
+DATABASE_URL = "从 Neon Connect 对话框复制的 PostgreSQL 连接串"
+```
+
+不要把真实连接串写进代码、GitHub、Issue 或聊天。建议使用 Neon 的 pooled connection string，并保留 `sslmode=require`。应用启动时会严格检查 `DATABASE_URL`：缺失或不是 PostgreSQL 时会显示配置错误并停止，不会回退到 Streamlit 临时文件系统中的 SQLite。
+
+### Streamlit Cloud 限制
+
+- 免费应用长时间无人访问时可能休眠，首次唤醒会稍慢；
+- Streamlit 进程可能重启，因此页面会话状态不是永久存储；收藏、已读和新闻数据通过 Neon PostgreSQL 持久化；
+- 当前匿名身份保存在页面 URL 的随机 `visitor` 参数中。同一链接可以延续收藏和已读状态；清除参数或换设备会生成新的匿名身份；
+- 当前真实来源必须先人工完成条款、robots 和接口许可审核；默认数据库只有演示数据；
+- Streamlit 公网入口不对外暴露 FastAPI Swagger。API 文档仅供本地访问：`http://127.0.0.1:8000/docs`；
+- 定时 RSS 更新默认关闭。Streamlit Community Cloud 不保证后台定时线程持续运行，生产级更新应使用独立调度任务或外部工作流。
+
+## PostgreSQL 配置
+
+公网需要持久化的服务端数据包括来源配置、原始文章、聚类事件、更新任务记录、匿名偏好、收藏和已读。正式 Streamlit 部署只接受 Neon PostgreSQL，不依赖临时 SQLite。
+
+本地如需模拟公网入口，可以临时设置 `DATABASE_URL` 后运行：
+
+```powershell
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+真实连接串只应放在本地环境变量或 Streamlit Secrets，不应保存到 `.env.example` 以外的受版本控制文件。
+
+## 本地 FastAPI 网站与 API
 
 ```powershell
 python -m venv .venv
@@ -28,7 +89,7 @@ pip install -r backend/requirements.txt
 uvicorn app.main:app --app-dir backend --reload
 ```
 
-打开 `http://127.0.0.1:8000/docs` 查看 API 文档。
+打开 `http://127.0.0.1:8000` 查看本地网站；API 文档仅在本地通过 `http://127.0.0.1:8000/docs` 访问。
 
 也可以在 Windows 仓库根目录运行：
 
@@ -49,7 +110,7 @@ $env:SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS="14400"
 $env:SIGNALSCOPE_ADMIN_KEY="your-local-admin-key"
 ```
 
-## Docker 运行（推荐）
+## Docker 自托管备用方案
 
 安装 Docker Desktop 后，在仓库根目录执行：
 
@@ -68,23 +129,9 @@ docker compose down
 
 除非明确希望清空数据，不要执行 `docker compose down -v`。
 
-## 部署为所有人可访问的网站
+CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测试、Streamlit 入口编译、前端语法检查和备用 Docker 镜像构建。
 
-仓库包含 `render.yaml`，可以部署为单一公网 Web Service：用户访问一个 HTTPS 地址即可使用，不需要安装 Python、Docker，也不需要分别打开前端和后端。公网部署必须配置免费或付费的持久 PostgreSQL `DATABASE_URL`，不能依赖 Render 临时文件系统保存 SQLite。
-
-部署前需要先把这个仓库推送到你自己的 GitHub/GitLab，再在 Render 中选择 Blueprint 部署。部署配置会：
-
-- 使用 Docker 构建一体化网站；
-- 自动创建管理密钥；
-- 通过 `DATABASE_URL` 连接外部 PostgreSQL，持久保存事件、来源、任务记录及用户状态；
-- 使用 `/api/v1/health` 做健康检查；
-- 每次仓库提交后自动重新部署。
-
-部署完成后会得到类似 `https://signalscope-ai.onrender.com` 的公开网址。Render Web Service 的临时文件系统不会承载正式数据；若未配置 PostgreSQL，不能把该部署视为完整上线。
-
-CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测试、前端语法检查和 Docker 镜像构建。
-
-主要接口：
+本地 FastAPI 主要接口：
 
 - `GET /api/v1/events`：热点事件列表；
 - `GET /api/v1/events/{id}`：事件详情；
@@ -100,7 +147,7 @@ CI 配置位于 `.github/workflows/ci.yml`，每次提交都会执行全部测�
 
 当前默认数据库只包含用于展示逻辑的本地样例数据。项目不会自动抓取任意网页，也不会绕过登录、验证码或付费墙。真实接入时应先完成来源条款审计，将 `robots_status` 设为 `allowed`、`compliance_status` 设为 `approved`，再通过管理接口注册 RSS 地址。
 
-## 本地启动（前端 Demo）
+## 本地静态前端 Demo
 
 ```powershell
 python -m http.server 4173 --directory frontend
@@ -114,6 +161,11 @@ python -m http.server 4173 --directory frontend
 pytest -q
 ```
 
-测试命令会执行后端单元测试、API 集成测试、前端契约测试，并要求后端代码覆盖率不低于 80%。前端交互还需在浏览器中验证首页加载、筛选、详情、收藏和主题切换。
+测试命令会执行后端单元测试、API 集成测试、Streamlit 服务层测试和部署契约测试，并要求后端代码覆盖率不低于 80%。
+
+```powershell
+node --check frontend/app.js
+python -m py_compile streamlit_app.py
+```
 
 MVP 使用本地样例数据和可替换的 AI 加工接口，不接入付费 API，也不抓取新闻网站。

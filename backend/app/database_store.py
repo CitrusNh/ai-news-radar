@@ -152,6 +152,11 @@ class RelationalStore(InMemoryStore):
     def close(self) -> None:
         self._engine.dispose()
 
+    def reload(self) -> None:
+        """Reload durable state after an explicit public-page refresh."""
+
+        self._load()
+
 
 class PostgreSQLStore(RelationalStore):
     pass

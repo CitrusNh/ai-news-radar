@@ -35,4 +35,6 @@ def test_persistent_store_uses_sqlite_locally_and_seeds_demo(tmp_path):
     store = persistent_store(tmp_path / "runtime" / "signalscope.db")
     assert len(store.events) == 12
     assert store.database_url.startswith("sqlite:///")
+    store.reload()
+    assert len(store.events) == 12
     store.close()

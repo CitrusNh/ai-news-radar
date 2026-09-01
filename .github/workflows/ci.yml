@@ -15,7 +15,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r backend/requirements.txt
+      - run: pip install -r requirements.txt
       - run: pytest -q
+      - run: python -m py_compile streamlit_app.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
