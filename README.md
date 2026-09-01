@@ -30,13 +30,13 @@ uvicorn app.main:app --app-dir backend --reload
 
 打开 `http://127.0.0.1:8000/docs` 查看 API 文档。
 
-也可以在仓库根目录运行：
+也可以在 Windows 仓库根目录运行：
 
 ```powershell
 .\start-demo.ps1
 ```
 
-脚本会在后台启动前端和后端。定时 RSS 任务默认关闭；只有在来源通过审核并设置环境变量后才建议启用：
+脚本只会启动一个网站服务，页面和 API 都在 `http://127.0.0.1:8000`。定时 RSS 任务默认关闭；只有在来源通过审核并设置环境变量后才建议启用：
 
 ```powershell
 $env:SIGNALSCOPE_SCHEDULER_ENABLED="true"
@@ -48,6 +48,25 @@ $env:SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS="14400"
 ```powershell
 $env:SIGNALSCOPE_ADMIN_KEY="your-local-admin-key"
 ```
+
+## Docker 运行（推荐）
+
+安装 Docker Desktop 后，在仓库根目录执行：
+
+```powershell
+$env:SIGNALSCOPE_ADMIN_KEY="replace-with-a-strong-key"
+docker compose up --build -d
+```
+
+随后打开 `http://127.0.0.1:8000`。页面、API 和 SQLite 数据库都在同一个容器应用中；数据库保存于 Docker 命名卷 `signalscope-data`，重启或升级容器不会丢失。
+
+停止网站：
+
+```powershell
+docker compose down
+```
+
+除非明确希望清空数据，不要执行 `docker compose down -v`。
 
 主要接口：
 

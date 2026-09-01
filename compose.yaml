@@ -1,0 +1,16 @@
+services:
+  signalscope:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      SIGNALSCOPE_ADMIN_KEY: "${SIGNALSCOPE_ADMIN_KEY:-change-this-before-public-deployment}"
+      SIGNALSCOPE_SCHEDULER_ENABLED: "${SIGNALSCOPE_SCHEDULER_ENABLED:-false}"
+      SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS: "${SIGNALSCOPE_SCHEDULER_INTERVAL_SECONDS:-14400}"
+    volumes:
+      - signalscope-data:/app/data/runtime
+    restart: unless-stopped
+
+volumes:
+  signalscope-data:

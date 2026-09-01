@@ -28,3 +28,13 @@ def test_readme_documents_persistence_safety_and_admin_workflow():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for phrase in ["SQLite 持久化", "compliance_status", "SIGNALSCOPE_ADMIN_KEY", "/api/v1/admin/runs"]:
         assert phrase in readme
+
+
+def test_container_contract_serves_one_site_with_persistent_data():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    assert "USER signalscope" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "--host 0.0.0.0" in dockerfile
+    assert "8000:8000" in compose
+    assert "signalscope-data:/app/data/runtime" in compose
