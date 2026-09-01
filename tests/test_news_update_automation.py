@@ -12,6 +12,18 @@ def test_github_news_workflow_has_beijing_schedule_and_manual_dispatch():
     assert "DATABASE_URL: ${{ secrets.DATABASE_URL }}" in workflow
     assert "python -m scripts.update_news" in workflow
     assert "cancel-in-progress: false" in workflow
+    assert "actions/checkout@v5" in workflow
+    assert "actions/setup-python@v6" in workflow
+
+
+def test_ci_workflow_uses_node_24_compatible_official_actions():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert workflow.count("actions/checkout@v5") == 2
+    assert "actions/setup-python@v6" in workflow
+    assert "actions/setup-node@v5" in workflow
+    assert "actions/checkout@v4" not in workflow
+    assert "actions/setup-python@v5" not in workflow
+    assert "actions/setup-node@v4" not in workflow
 
 
 def test_update_script_is_importable_without_running_the_job():
