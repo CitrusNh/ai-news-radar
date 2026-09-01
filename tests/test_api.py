@@ -41,6 +41,17 @@ def test_event_actions_preferences_and_library_flow(client):
     assert client.get("/api/v1/library", params={"type": "read"}, headers=headers).json()[0]["id"] == event_id
 
 
+def test_unread_and_unsaved_actions_remove_items_from_library(client):
+    headers = {"X-Anonymous-User": "u-toggle"}
+    event_id = client.get("/api/v1/events", headers=headers).json()[0]["id"]
+    client.post(f"/api/v1/events/{event_id}/actions", json={"action_type": "saved"}, headers=headers)
+    client.post(f"/api/v1/events/{event_id}/actions", json={"action_type": "unsaved"}, headers=headers)
+    assert client.get("/api/v1/library", headers=headers).json() == []
+    client.post(f"/api/v1/events/{event_id}/actions", json={"action_type": "read"}, headers=headers)
+    client.post(f"/api/v1/events/{event_id}/actions", json={"action_type": "unread"}, headers=headers)
+    assert client.get("/api/v1/library", params={"type": "read"}, headers=headers).json() == []
+
+
 def test_invalid_event_and_invalid_action_are_rejected(client):
     assert client.get("/api/v1/events/not-found").status_code == 404
     assert client.post("/api/v1/events/not-found/actions", json={"action_type": "saved"}).status_code == 404
