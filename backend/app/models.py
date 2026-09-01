@@ -20,6 +20,12 @@ class Source:
     feed_url: str = ""
     terms_url: str = ""
     robots_status: str = "unknown"
+    fetch_mode: str = "rss"
+    article_selector: str = ""
+    title_selector: str = ""
+    link_selector: str = ""
+    summary_selector: str = ""
+    date_selector: str = ""
     default_channel: str = "未分类"
     compliance_status: str = "pending"
 

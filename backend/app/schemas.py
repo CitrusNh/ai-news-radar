@@ -112,6 +112,12 @@ class SourceIn(BaseModel):
     robots_status: Literal["unknown", "allowed", "blocked"] = "unknown"
     default_channel: str = "未分类"
     compliance_status: Literal["pending", "approved", "rejected"] = "pending"
+    fetch_mode: Literal["rss", "html"] = "rss"
+    article_selector: str = ""
+    title_selector: str = ""
+    link_selector: str = ""
+    summary_selector: str = ""
+    date_selector: str = ""
 
 
 class SourceDetailOut(SourceIn):
