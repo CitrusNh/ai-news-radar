@@ -8,13 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .models import UserAction, UserPreference, model_to_dict
 from .schemas import ActionIn, ActionOut, EventOut, PreferenceIn, PreferenceOut, RunOut, SourceHealthOut
-from .store import InMemoryStore, demo_store
+from .store import InMemoryStore
+from .sqlite_store import persistent_demo_store
 
 
 def create_app(store: InMemoryStore | None = None) -> FastAPI:
     app = FastAPI(title="SignalScope AI API", version="0.1.0", description="AI 热点摘要雷达 MVP API")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "PUT"], allow_headers=["*"])
-    app.state.store = store or demo_store()
+    app.state.store = store or persistent_demo_store()
 
     def get_store() -> InMemoryStore:
         return app.state.store
