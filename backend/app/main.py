@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from uuid import uuid4
+import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from .models import UserAction, UserPreference, model_to_dict
-from .schemas import ActionIn, ActionOut, EventOut, PreferenceIn, PreferenceOut, RunOut, SourceHealthOut
+from .ingestion import validate_feed_url
+from .models import Source, UserAction, UserPreference, model_to_dict
+from .schemas import ActionIn, ActionOut, EventOut, PreferenceIn, PreferenceOut, RunOut, SourceDetailOut, SourceHealthOut, SourceIn
 from .store import InMemoryStore
 from .sqlite_store import persistent_demo_store
+from .workflow import IngestionWorkflow
 
 
 def create_app(store: InMemoryStore | None = None) -> FastAPI:
@@ -25,6 +26,11 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
         if len(value) > 80:
             raise HTTPException(status_code=400, detail="X-Anonymous-User is too long")
         return value
+
+    def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
+        expected = os.getenv("SIGNALSCOPE_ADMIN_KEY", "")
+        if expected and x_admin_key != expected:
+            raise HTTPException(status_code=401, detail="invalid admin key")
 
     def event_out(event, store: InMemoryStore) -> EventOut:
         payload = model_to_dict(event)
@@ -97,10 +103,31 @@ def create_app(store: InMemoryStore | None = None) -> FastAPI:
             result.append(SourceHealthOut(id=source.id, name=source.name, active=source.active, trust_tier=source.trust_tier, article_count=len(articles), latest_article_at=max((article.published_at for article in articles), default=None)))
         return result
 
-    @app.post("/api/v1/admin/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)
+    @app.get("/api/v1/admin/sources", response_model=list[SourceDetailOut], dependencies=[Depends(require_admin)])
+    def list_sources(store: InMemoryStore = Depends(get_store)) -> list[SourceDetailOut]:
+        return [SourceDetailOut.model_validate(model_to_dict(source)) for source in store.sources.values()]
+
+    @app.put("/api/v1/admin/sources/{source_id}", response_model=SourceDetailOut, dependencies=[Depends(require_admin)])
+    def put_source(source_id: str, payload: SourceIn, store: InMemoryStore = Depends(get_store)) -> SourceDetailOut:
+        if source_id != payload.id:
+            raise HTTPException(status_code=400, detail="source id in path and payload must match")
+        try:
+            validate_feed_url(payload.feed_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return SourceDetailOut.model_validate(model_to_dict(store.upsert_source(Source(**payload.model_dump()))))
+
+    @app.post("/api/v1/admin/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
     def trigger_run(store: InMemoryStore = Depends(get_store)) -> RunOut:
-        run_id = f"run-{uuid4().hex[:10]}"
-        return RunOut(run_id=run_id, status="demo_noop", source_count=len(store.sources), article_count=len(store.articles))
+        run = IngestionWorkflow(store).run()
+        return RunOut(run_id=run.id, status=run.status, source_count=run.source_count, article_count=run.article_count, error_count=run.error_count, errors=run.errors, started_at=run.started_at, finished_at=run.finished_at)
+
+    @app.get("/api/v1/admin/runs/{run_id}", response_model=RunOut, dependencies=[Depends(require_admin)])
+    def get_run(run_id: str, store: InMemoryStore = Depends(get_store)) -> RunOut:
+        run = store.runs.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return RunOut(run_id=run.id, status=run.status, source_count=run.source_count, article_count=run.article_count, error_count=run.error_count, errors=run.errors, started_at=run.started_at, finished_at=run.finished_at)
 
     return app
 

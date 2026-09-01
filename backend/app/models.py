@@ -20,6 +20,7 @@ class Source:
     feed_url: str = ""
     terms_url: str = ""
     robots_status: str = "unknown"
+    default_channel: str = "未分类"
 
 
 @dataclass(slots=True)

@@ -63,4 +63,5 @@ def test_source_health_and_demo_run(client):
     health = client.get("/api/v1/admin/source-health")
     assert health.status_code == 200 and len(health.json()) >= 5
     run = client.post("/api/v1/admin/runs")
-    assert run.status_code == 201 and run.json()["status"] == "demo_noop"
+    assert run.status_code == 201 and run.json()["status"] == "completed"
+    assert client.get(f"/api/v1/admin/runs/{run.json()['run_id']}").json()["run_id"] == run.json()["run_id"]

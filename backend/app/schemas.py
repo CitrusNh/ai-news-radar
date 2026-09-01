@@ -100,8 +100,29 @@ class SourceHealthOut(BaseModel):
     latest_article_at: datetime | None
 
 
+class SourceIn(BaseModel):
+    id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    name: str = Field(min_length=1, max_length=120)
+    domain: str = "AI"
+    source_type: str = "official"
+    trust_tier: int = Field(default=2, ge=1, le=3)
+    active: bool = True
+    feed_url: str
+    terms_url: str = ""
+    robots_status: Literal["unknown", "allowed", "blocked"] = "unknown"
+    default_channel: str = "未分类"
+
+
+class SourceDetailOut(SourceIn):
+    pass
+
+
 class RunOut(BaseModel):
     run_id: str
     status: str
     source_count: int
     article_count: int
+    error_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None

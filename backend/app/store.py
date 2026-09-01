@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
 
-from .models import Article, Event, Source, UserAction, UserPreference
+from .models import Article, CrawlRun, Event, Source, UserAction, UserPreference
 from .processing import build_demo_enrichment, calculate_global_heat, cluster_events, deduplicate_articles, normalize_article, rank_events
 
 
@@ -19,6 +19,46 @@ class InMemoryStore:
         self.events: dict[str, Event] = {}
         self.preferences: dict[str, UserPreference] = {}
         self.actions: list[UserAction] = []
+        self.runs: dict[str, CrawlRun] = {}
+
+    def persist(self) -> None:
+        """Persistence hook overridden by durable stores."""
+
+    def upsert_source(self, source: Source) -> Source:
+        with self._lock:
+            self.sources[source.id] = source
+            self.persist()
+            return source
+
+    def add_run(self, run: CrawlRun) -> CrawlRun:
+        with self._lock:
+            self.runs[run.id] = run
+            self.persist()
+            return run
+
+    def ingest_raw_articles(self, raw_articles: list[dict]) -> list[Article]:
+        """Incrementally add new articles and rebuild derived events deterministically."""
+
+        with self._lock:
+            known_urls = {article.canonical_url for article in self.articles.values()}
+            added: list[Article] = []
+            for raw in raw_articles:
+                source = self.sources[raw["source_id"]]
+                candidate_id = f"art-{uuid4().hex[:12]}"
+                article = normalize_article(raw, source, candidate_id)
+                if article.canonical_url in known_urls:
+                    continue
+                known_urls.add(article.canonical_url)
+                self.articles[article.id] = article
+                added.append(article)
+            all_articles = deduplicate_articles(list(self.articles.values()))
+            events = cluster_events(all_articles)
+            self.events = {event.id: event for event in events}
+            for event in events:
+                calculate_global_heat(event, self.articles, self.sources)
+                build_demo_enrichment(event, self.articles)
+            self.persist()
+            return added
 
     def seed(self, sources: list[Source], raw_articles: list[dict]) -> None:
         with self._lock:
@@ -42,6 +82,7 @@ class InMemoryStore:
     def set_preference(self, preference: UserPreference) -> UserPreference:
         with self._lock:
             self.preferences[preference.anonymous_user_id] = preference
+            self.persist()
             return preference
 
     def list_events(self, anonymous_user_id: str, domain: str | None = None, channel: str | None = None, keyword: str | None = None, sort: str = "heat") -> list[Event]:
@@ -67,6 +108,7 @@ class InMemoryStore:
             if action.action_type == "saved":
                 self.actions = [existing for existing in self.actions if not (existing.anonymous_user_id == action.anonymous_user_id and existing.event_id == action.event_id and existing.action_type == "unsaved")]
             self.actions.append(action)
+            self.persist()
             return action
 
     def library(self, anonymous_user_id: str, action_type: str = "saved") -> list[Event]:

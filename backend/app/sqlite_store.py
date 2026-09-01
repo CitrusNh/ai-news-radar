@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import RLock
 
-from .models import Article, Enrichment, Event, Source, UserAction, UserPreference, ensure_utc, model_to_dict
+from .models import Article, CrawlRun, Enrichment, Event, Source, UserAction, UserPreference, ensure_utc, model_to_dict
 from .store import InMemoryStore
 
 
@@ -32,6 +32,7 @@ class SQLiteStore(InMemoryStore):
                 CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS preferences (anonymous_user_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS actions (id INTEGER PRIMARY KEY AUTOINCREMENT, anonymous_user_id TEXT NOT NULL, event_id TEXT NOT NULL, action_type TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS crawl_runs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 """
             )
 
@@ -68,6 +69,12 @@ class SQLiteStore(InMemoryStore):
             for row in self._db.execute("SELECT anonymous_user_id, payload FROM preferences"):
                 self.preferences[row["anonymous_user_id"]] = UserPreference(**json.loads(row["payload"]))
             self.actions = [UserAction(row["anonymous_user_id"], row["event_id"], row["action_type"], self._dt(row["created_at"])) for row in self._db.execute("SELECT anonymous_user_id, event_id, action_type, created_at FROM actions ORDER BY id")]
+            self.runs = {}
+            for row in self._db.execute("SELECT id, payload FROM crawl_runs"):
+                payload = json.loads(row["payload"])
+                payload["started_at"] = self._dt(payload["started_at"])
+                payload["finished_at"] = self._dt(payload["finished_at"]) if payload.get("finished_at") else None
+                self.runs[row["id"]] = CrawlRun(**payload)
 
     def _persist(self) -> None:
         with self._db:
@@ -81,19 +88,24 @@ class SQLiteStore(InMemoryStore):
             self._db.executemany("INSERT INTO preferences(anonymous_user_id, payload) VALUES(?, ?)", [(item.anonymous_user_id, json.dumps(model_to_dict(item), ensure_ascii=False)) for item in self.preferences.values()])
             self._db.execute("DELETE FROM actions")
             self._db.executemany("INSERT INTO actions(anonymous_user_id, event_id, action_type, created_at) VALUES(?, ?, ?, ?)", [(item.anonymous_user_id, item.event_id, item.action_type, ensure_utc(item.created_at).isoformat()) for item in self.actions])
+            self._db.execute("DELETE FROM crawl_runs")
+            self._db.executemany("INSERT INTO crawl_runs(id, payload) VALUES(?, ?)", [(item.id, json.dumps(model_to_dict(item), ensure_ascii=False)) for item in self.runs.values()])
+
+    def persist(self) -> None:
+        self._persist()
 
     def seed(self, sources: list[Source], raw_articles: list[dict]) -> None:
         super().seed(sources, raw_articles)
-        self._persist()
+        self.persist()
 
     def get_preference(self, anonymous_user_id: str) -> UserPreference:
         preference = super().get_preference(anonymous_user_id)
-        self._persist()
+        self.persist()
         return preference
 
     def set_preference(self, preference: UserPreference) -> UserPreference:
         value = super().set_preference(preference)
-        self._persist()
+        self.persist()
         return value
 
     def add_action(self, action: UserAction) -> UserAction:

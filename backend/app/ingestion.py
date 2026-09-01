@@ -63,7 +63,7 @@ def parse_feed(xml_payload: str, source: Source) -> list[dict]:
             summary = _text(node.find("description"))
             published = _text(node.find("pubDate"))
             if title and link:
-                articles.append({"source_id": source.id, "url": link, "title": title, "summary": summary, "channel": source.domain, "published_at": _parse_datetime(published), "entities": []})
+                articles.append({"source_id": source.id, "url": link, "title": title, "summary": summary, "channel": source.default_channel, "published_at": _parse_datetime(published), "entities": []})
     else:
         nodes = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1].lower() == "entry"]
         for node in nodes:
@@ -73,7 +73,7 @@ def parse_feed(xml_payload: str, source: Source) -> list[dict]:
             links = [child.attrib.get("href", "") for child in node if child.tag.rsplit("}", 1)[-1].lower() == "link"]
             link = next((item for item in links if item), "")
             if title and link:
-                articles.append({"source_id": source.id, "url": link, "title": title, "summary": summary, "channel": source.domain, "published_at": _parse_datetime(published), "entities": []})
+                articles.append({"source_id": source.id, "url": link, "title": title, "summary": summary, "channel": source.default_channel, "published_at": _parse_datetime(published), "entities": []})
     return articles
 
 
