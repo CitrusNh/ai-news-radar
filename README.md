@@ -2,8 +2,7 @@
 
 面向公众的热点新闻聚合网站。系统通过 RSS/Atom 和公开新闻列表页采集最近 7 天内容，完成 URL 去重、事件聚类、热度排序和文字摘要，并将新闻、更新记录、匿名收藏与已读状态持久化到 Neon PostgreSQL。
 
-- GitHub：[https://github.com/CitrusNh/ai-news-radar](https://github.com/CitrusNh/ai-news-radar)
-- Streamlit 公网 Demo：[https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/](https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/)
+- Streamlit 公网 ：[https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/](https://ai-news-radarbranchmainmainfilepathappapppy-hhjj3jwd6mj57vhpez.streamlit.app/)
 
 ## 产品功能
 
